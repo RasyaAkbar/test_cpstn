@@ -1,0 +1,24 @@
+/* Tata letak halaman Evaluasi. PEMILIK: Orang 1 — Frontend. */
+.eval-page { display: flex; flex-direction: column; gap: var(--space-7); }
+.eval-controls { display: grid; grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); gap: var(--space-6) var(--space-8); padding: var(--space-6) var(--space-7); }
+.eval-controls .check-list legend { margin-bottom: var(--space-3); }
+.eval-submit { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-4); padding-top: var(--space-5); border-top: 1px solid var(--color-border); }
+
+.eval-best { margin: var(--space-6) var(--space-7) 0; padding: var(--space-4) var(--space-5); border-radius: var(--radius-card); background: var(--color-primary-light); color: var(--color-primary); }
+.eval-best p { font: var(--text-body-sm); color: var(--color-body); margin-top: var(--space-2); }
+.module-panel > .table-scroll { padding: var(--space-5) var(--space-7) 0; }
+
+.kpi-table tbody th { font: var(--text-label); color: var(--color-heading); min-width: 220px; }
+.kpi-table td strong { font: var(--text-data); color: var(--color-heading); }
+.kpi-table td { white-space: nowrap; }
+.kpi-table .is-best { background: #f0f7f4; }
+.kpi-table thead .is-best { color: var(--color-primary); }
+
+.eval-footnote { padding: var(--space-4) var(--space-7) var(--space-6); }
+
+@media (max-width: 760px) {
+  .eval-controls { grid-template-columns: minmax(0, 1fr); padding: var(--space-5); }
+  .eval-best { margin: var(--space-5) var(--space-5) 0; }
+  .module-panel > .table-scroll { padding: var(--space-4) var(--space-5) 0; }
+  .eval-footnote { padding: var(--space-4) var(--space-5) var(--space-5); }
+}
