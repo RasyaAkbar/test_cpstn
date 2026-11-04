@@ -8,6 +8,7 @@ import { compareScenarios, getKpiDefinitions, MAX_COMPARED_SCENARIOS, type Compa
 import { listScenarios, type Scenario } from '../simulasi/api';
 import { SITUATIONS } from '../simulasi/situations';
 import { KpiComparison } from './KpiComparison';
+import { Button } from '../../shared/ui';
 import './evaluasi.css';
 
 const message = (error: unknown) => (error instanceof Error ? error.message : 'Terjadi kesalahan');
@@ -65,7 +66,14 @@ export function EvaluasiPage() {
         <div className="eval-submit">
           {tooMany && <p className="notice notice-warning">Pilih maksimal {MAX_COMPARED_SCENARIOS} skenario.</p>}
           {error && <p className="notice notice-danger" role="alert">{error}</p>}
-          <button type="submit" className="button" disabled={busy || chosen.length === 0 || tooMany}>{busy ? 'Menghitung…' : 'Bandingkan KPI'}</button>
+          <Button
+            type="submit"
+            variant="primary"
+            loading={busy}
+            disabled={busy || chosen.length === 0 || tooMany}
+          >
+            {busy ? 'Menghitung…' : 'Bandingkan KPI'}
+          </Button>
         </div>
       </form>
     </section>

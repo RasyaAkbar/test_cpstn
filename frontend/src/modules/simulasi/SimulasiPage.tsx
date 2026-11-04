@@ -1,3 +1,4 @@
+import { Badge, Button } from '../../shared/ui';
 /* Halaman Simulasi: daftar skenario, form scenario setup, dan hasil simulasi.
    Alur: buat/pilih skenario → simpan → jalankan → lihat hasil (UC-01 s.d. UC-04).
    PEMILIK: Orang 1 — Frontend. */
@@ -97,14 +98,14 @@ export function SimulasiPage() {
   const saved = selected !== NEW;
   return <div className="sim-page">
     <div className="sim-context">
-      <span className="badge badge-accent">Sumber data: {baseline.data_source === 'synthetic' ? 'sintetis' : 'PuTI'}</span>
-      <span className="badge">Baseline mulai {formatDate(baseline.start_date)}</span>
-      <span className="badge">{baseline.projects.length} proyek · {baseline.resources.length} anggota · {baseline.tasks.length} task</span>
+      <Badge variant="primary">Sumber data: {baseline.data_source === 'synthetic' ? 'sintetis' : 'PuTI'}</Badge>
+      <Badge variant="neutral">Baseline mulai {formatDate(baseline.start_date)}</Badge>
+      <Badge variant="neutral">{baseline.projects.length} proyek · {baseline.resources.length} anggota · {baseline.tasks.length} task</Badge>
     </div>
 
     <div className="sim-layout">
       <aside className="module-panel sim-list" aria-label="Skenario tersimpan">
-        <div className="panel-heading"><h2>Skenario</h2><button type="button" className="button button-ghost" onClick={() => select(NEW)}>+ Baru</button></div>
+        <div className="panel-heading"><h2>Skenario</h2><Button variant="outline" size="sm" onClick={() => select(NEW)}>+ Baru</Button></div>
         <ul>
           {selected === NEW && <li><button type="button" className="sim-list-item active">Skenario baru (belum disimpan)</button></li>}
           {scenarios.map((s) => <li key={s.scenario_id}>
@@ -122,10 +123,10 @@ export function SimulasiPage() {
           <ScenarioForm baseline={baseline} draft={draft} onChange={setDraft} />
           {error && <p className="notice notice-danger" role="alert">{error}</p>}
           <div className="sim-actions">
-            <button type="submit" className="button" disabled={busy !== null}>{busy === 'run' ? 'Menjalankan…' : 'Simpan & jalankan simulasi'}</button>
-            <button type="button" className="button button-ghost" disabled={busy !== null} onClick={() => void save()}>{busy === 'save' ? 'Menyimpan…' : 'Simpan'}</button>
-            <button type="button" className="button button-ghost" disabled={!saved || busy !== null} onClick={() => void duplicate()}>Duplikat</button>
-            <button type="button" className="button button-ghost button-danger" disabled={!saved || busy !== null} onClick={() => void remove()}>Hapus</button>
+            <Button type="submit" variant="primary" loading={busy === 'run'} disabled={busy !== null}>{busy === 'run' ? 'Menjalankan…' : 'Simpan & jalankan simulasi'}</Button>
+            <Button variant="outline" loading={busy === 'save'} disabled={busy !== null} onClick={() => void save()}>{busy === 'save' ? 'Menyimpan…' : 'Simpan'}</Button>
+            <Button variant="outline" disabled={!saved || busy !== null} onClick={() => void duplicate()}>Duplikat</Button>
+            <Button variant="danger" disabled={!saved || busy !== null} onClick={() => void remove()}>Hapus</Button>
           </div>
         </form>
       </section>
