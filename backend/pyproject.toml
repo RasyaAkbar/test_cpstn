@@ -14,6 +14,7 @@ dependencies = [
   "psycopg[binary]>=3.2,<4",
   "pydantic-settings>=2.7,<3",
   "alembic>=1.14,<2",
+  "openpyxl>=3.1,<4",
 ]
 
 [project.optional-dependencies]
@@ -31,4 +32,8 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+# Migrasi hasil autogenerate memuat teks CHECK constraint panjang yang tidak bisa dipecah.
+"migrations/versions/*" = ["E501"]
 

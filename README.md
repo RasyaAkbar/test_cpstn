@@ -11,7 +11,9 @@ Kerangka aplikasi dari referensi HTML Digital Twin PuTI. Branch `main` disiapkan
 
 - **Simulasi dan Evaluasi (Iterasi 1–2)**: scenario setup untuk 8 situasi keputusan, mesin simulasi what-if dengan replikasi Monte Carlo, KPI, dan perbandingan baseline vs skenario. Masih memakai data sintetis dan menyimpan skenario di memori. Pembagian file per anggota: [docs/SIMULASI_EVALUASI.md](docs/SIMULASI_EVALUASI.md).
 
-Belum ada autentikasi, unggah CSV, tabel bisnis di PostgreSQL, graf dependency, decision support, atau ekspor laporan. Identitas workspace bukan pengguna yang sudah login. Router Data dan Digital Twin masih kosong.
+- **Dataset baseline (modul Data)**: 11 tabel PostgreSQL yang sama persis dengan sheet `puti_datasets.xlsx` (Tabel 4.3), importer dengan validasi per baris, riwayat import, dan `GET /api/v1/data/status`. Lihat [langkah 4](#4-tabel-dan-dataset-baseline).
+
+Belum ada autentikasi, unggah file lewat UI, graf dependency, decision support, atau ekspor laporan. Identitas workspace bukan pengguna yang sudah login. Router Digital Twin masih kosong. Mesin simulasi masih memakai data sintetis bawaan (`simulasi/synthetic_data.py`), belum membaca tabel dataset.
 
 ## Struktur
 
@@ -30,7 +32,7 @@ backend/
     core/                  # Konfigurasi environment
     db/                    # Base SQLAlchemy dan session
     modules/               # Router kosong per modul
-  migrations/              # Alembic, belum ada migrasi bisnis
+  migrations/              # Alembic: tabel dataset baseline
   tests/
 docs/
   BRANCH_WORKFLOW.md
@@ -82,6 +84,24 @@ Buka http://localhost:5173. Proxy Vite meneruskan `/api` ke `http://127.0.0.1:80
 
 Untuk macOS/Linux, gunakan `cp` dan `.venv/bin/python` sebagai pengganti `Copy-Item` dan `.\.venv\Scripts\python.exe`.
 
+### 4. Tabel dan dataset baseline
+
+Dari `backend/` dengan PostgreSQL aktif. Jika venv dibuat sebelum modul Data ada, ulangi perintah `pip install -c constraints.txt -e ".[dev]"` agar `openpyxl` terpasang.
+
+```powershell
+.\.venv\Scripts\python.exe -m alembic upgrade head
+.\.venv\Scripts\python.exe -m app.modules.data.importer ..\puti_datasets.xlsx --source synthetic --dry-run
+.\.venv\Scripts\python.exe -m app.modules.data.importer ..\puti_datasets.xlsx --source synthetic
+```
+
+- Setiap sheet `<tabel>_csv` dimuat ke tabel bernama sama (`projects`, `resources`, `roles`, `complexity_levels`, `tasks`, `task_dependencies`, `assignments`, `workload_items`, `availability`, `change_events`, `holidays`). Kolom dan urutannya harus sama dengan model di `backend/app/modules/data/models.py`.
+- Importer memeriksa semua baris dulu: tipe data, wajib isi, nilai yang diizinkan (status, fase, severity, ...), urutan tanggal, kunci unik, foreign key, dan siklus dependency. Masalah ditampilkan per sheet, baris Excel, dan kolom; jika ada masalah, database tidak diubah.
+- Import yang valid mengganti isi 11 tabel dalam satu transaksi dan dicatat di `dataset_imports`. `--dry-run` hanya memvalidasi.
+- `--source` wajib: `synthetic` untuk data contoh, `puti` untuk data asli PuTI. Label ini yang nanti ditampilkan di setiap layar.
+- Cek hasilnya di http://localhost:8000/api/v1/data/status.
+
+Aturan validasi ditulis sekali sebagai CHECK constraint di `models.py`; importer membaca aturan yang sama sehingga pesan galat ramah muncul sebelum database menolak data.
+
 ## Pemeriksaan
 
 Dari `frontend/`:
@@ -98,7 +118,7 @@ Dari `backend/`:
 .\.venv\Scripts\python.exe -m alembic heads
 ```
 
-Tes health memakai dependency override untuk menguji status sukses/gagal tanpa PostgreSQL. Setelah database aktif, periksa koneksi nyata dengan `Invoke-RestMethod http://localhost:8000/api/v1/health/ready`. `alembic heads` belum menampilkan revisi karena belum ada skema bisnis.
+Tes health memakai dependency override untuk menguji status sukses/gagal tanpa PostgreSQL. Setelah database aktif, periksa koneksi nyata dengan `Invoke-RestMethod http://localhost:8000/api/v1/health/ready`. `alembic heads` menampilkan satu revisi: `30da49c3701e` (tabel dataset). `tests/test_data_import.py` juga memvalidasi `puti_datasets.xlsx` di root repo jika file tersebut ada.
 
 ## Migrasi saat modul mulai dibuat
 
@@ -110,7 +130,7 @@ Tambahkan model pada folder modul dan import model tersebut di `backend/migratio
 .\.venv\Scripts\python.exe -m alembic upgrade head
 ```
 
-Tidak ada model atau migrasi bisnis awal yang dipaksakan oleh scaffold ini. Detail pembagian pekerjaan: [alur branch](docs/BRANCH_WORKFLOW.md).
+Setelah autogenerate, jalankan `ruff check --fix` dan `ruff format` pada file migrasi baru agar lolos CI. Jangan memakai tipe kolom dari kode aplikasi di dalam migrasi; tulis tipe database aslinya (misalnya `sa.Text()`). Detail pembagian pekerjaan: [alur branch](docs/BRANCH_WORKFLOW.md).
 
 ## Build frontend
 

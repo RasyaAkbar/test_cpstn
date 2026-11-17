@@ -1,5 +1,6 @@
 from alembic import context
 
+import app.modules.data.models  # noqa: F401  (mendaftarkan tabel dataset ke metadata)
 from app.db.base import Base
 from app.db.session import engine
 
