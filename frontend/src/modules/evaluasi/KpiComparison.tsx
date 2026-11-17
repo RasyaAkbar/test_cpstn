@@ -1,6 +1,7 @@
 /* Tabel perbandingan KPI baseline vs skenario, penanda nilai lebih buruk, indikator
    skenario terbaik, Schedule Variance per proyek, beban per anggota (RLI/SOI), dan task
    dengan Cascade Delay Impact terbesar (FR-04.1 s.d. FR-04.10, FR-06, Tabel 4.7).
+   peringkat skenario, ketepatan target per proyek, dan beban per anggota (FR-06, Tabel 4.7).
    PEMILIK: Orang 1 — Frontend. Definisi dan arah KPI datang dari backend (Orang 3). */
 
 import type { CompareResponse, Evaluation, KpiDefinition, KpiValue, TaskCascade } from './api';
@@ -81,11 +82,17 @@ export function KpiComparison({ result, definitions }: Props) {
 function KpiCell({ value, best }: { value: KpiValue | undefined; best: boolean }) {
   if (!value) return <td>—</td>;
   const d = value.distribution;
-  return <td className={`num ${best ? 'is-best' : ''} ${value.status === 'worse' ? 'cell-danger' : ''}`}>
-    <strong>{formatNumber(value.value)}</strong>
-    {value.delta !== null && value.status && value.status !== 'same' && <span className={`delta delta-${value.status}`} title={STATUS_LABEL[value.status]}> {formatSigned(value.delta)}</span>}
-    {d && <small>median {formatNumber(d.median)} · {formatNumber(d.p10)}–{formatNumber(d.p90)}</small>}
-  </td>;
+  return (
+    <td className={`num ${best ? 'is-best' : ''} ${value.status === 'worse' ? 'cell-danger' : ''}`}>
+      <strong>{formatNumber(value.value)}</strong>
+      {value.delta !== null && value.status && value.status !== 'same' && (
+        <span className={`delta delta-${value.status}`} title={STATUS_LABEL[value.status]}>
+          {' '}{formatSigned(value.delta)}
+        </span>
+      )}
+      {d && <small>median {formatNumber(d.median)} · {formatNumber(d.p10)}–{formatNumber(d.p90)}</small>}
+    </td>
+  );
 }
 
 function ProjectCell({ evaluation, projectId }: { evaluation: Evaluation; projectId: string }) {

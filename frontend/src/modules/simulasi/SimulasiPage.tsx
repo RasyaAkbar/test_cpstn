@@ -1,3 +1,4 @@
+import { Button } from '../../shared/ui';
 /* Halaman Simulasi: daftar skenario, form scenario setup, dan hasil simulasi.
    Alur: buat/pilih skenario → simpan → jalankan → lihat hasil (UC-01 s.d. UC-04).
    PEMILIK: Orang 1 — Frontend. */
@@ -77,12 +78,37 @@ export function SimulasiPage() {
     setSelected(copy.scenario_id); setDraft(toDraft(copy)); setRun(null); setKpis(null);
   });
 
-  const remove = () => act('delete', async () => {
-    await deleteScenario(selected);
-    const rest = scenarios.filter((s) => s.scenario_id !== selected);
-    setScenarios(rest); setRun(null); setKpis(null);
-    if (rest.length) { setSelected(rest[0].scenario_id); setDraft(toDraft(rest[0])); } else { setSelected(NEW); setDraft(newDraft(baseline)); }
-  });
+
+  const remove = () => {
+    if (selected === NEW) return;
+
+    const confirmed = window.confirm(
+      `Hapus skenario "${draft.name}"?\n\nTindakan ini tidak dapat dibatalkan.`
+    );
+
+    if (!confirmed) return;
+
+    void act('delete', async () => {
+      await deleteScenario(selected);
+
+      const rest = scenarios.filter(
+        (s) => s.scenario_id !== selected
+      );
+
+      setScenarios(rest);
+      setRun(null);
+      setKpis(null);
+
+      if (rest.length) {
+        setSelected(rest[0].scenario_id);
+        setDraft(toDraft(rest[0]));
+      } else {
+        setSelected(NEW);
+        setDraft(newDraft(baseline));
+      }
+    });
+  };
+
 
   /* UC-03: simulasi hanya untuk skenario tersimpan, jadi draft disimpan dulu. */
   const simulate = () => act('run', async () => {
@@ -102,9 +128,10 @@ export function SimulasiPage() {
       <span className="badge">{baseline.projects.length} proyek · {baseline.resources.length} anggota · {baseline.tasks.length} task</span>
     </div>
 
+
     <div className="sim-layout">
       <aside className="module-panel sim-list" aria-label="Skenario tersimpan">
-        <div className="panel-heading"><h2>Skenario</h2><button type="button" className="button button-ghost" onClick={() => select(NEW)}>+ Baru</button></div>
+        <div className="panel-heading"><h2>Skenario</h2><Button variant="outline" size="sm" onClick={() => select(NEW)}>+ Baru</Button></div>
         <ul>
           {selected === NEW && <li><button type="button" className="sim-list-item active">Skenario baru (belum disimpan)</button></li>}
           {scenarios.map((s) => <li key={s.scenario_id}>
@@ -117,19 +144,69 @@ export function SimulasiPage() {
       </aside>
 
       <section className="module-panel" aria-label="Scenario setup">
-        <div className="panel-heading"><h2>{saved ? draft.name : 'Skenario baru'}</h2>{saved && <span className="subtle-badge">{selected}</span>}</div>
+
+        <div className="panel-heading sim-editor-heading">
+          <div className="sim-editor-heading-content">
+            <h2>{draft.name.trim() || 'Skenario tanpa nama'}</h2>
+            <p className="sim-editor-subtitle">
+              {SITUATIONS[draft.parameters.situation].label}
+              {!saved && ' · Belum disimpan'}
+            </p>
+          </div>
+
+          {saved && (
+            <span className="sim-scenario-id">
+              {selected}
+            </span>
+          )}
+        </div>
+
         <form className="sim-editor" onSubmit={(e) => { e.preventDefault(); void simulate(); }}>
           <ScenarioForm baseline={baseline} draft={draft} onChange={setDraft} />
           {error && <p className="notice notice-danger" role="alert">{error}</p>}
+
           <div className="sim-actions">
-            <button type="submit" className="button" disabled={busy !== null}>{busy === 'run' ? 'Menjalankan…' : 'Simpan & jalankan simulasi'}</button>
-            <button type="button" className="button button-ghost" disabled={busy !== null} onClick={() => void save()}>{busy === 'save' ? 'Menyimpan…' : 'Simpan'}</button>
-            <button type="button" className="button button-ghost" disabled={!saved || busy !== null} onClick={() => void duplicate()}>Duplikat</button>
-            <button type="button" className="button button-ghost button-danger" disabled={!saved || busy !== null} onClick={() => void remove()}>Hapus</button>
-          </div>
-        </form>
-      </section>
-    </div>
+            <div className="sim-actions-secondary">
+              <Button
+                variant="outline"
+                disabled={!saved || busy !== null}
+                onClick={() => void duplicate()}
+              >
+                Duplikat
+              </Button>
+              <Button
+                variant="outline"
+                disabled={!saved || busy !== null}
+                onClick={() => void remove()}
+              >
+                Hapus
+              </Button>
+            </div>
+
+            <div className="sim-actions-primary">
+              <Button
+                variant="outline"
+                loading={busy === 'save'}
+                disabled={busy !== null}
+                onClick={() => void save()}
+              >
+                {busy === 'save' ? 'Menyimpan…' : 'Simpan'}
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                loading={busy === 'run'}
+                disabled={busy !== null}
+              >
+                {busy === 'run'
+                  ? 'Menjalankan…'
+                  : 'Simpan & jalankan simulasi'}
+              </Button>
+            </div>
+              </div>
+            </form>
+          </section>
+        </div>
 
     {run && <section className="module-panel" aria-label="Hasil simulasi">
       <div className="panel-heading"><h2>Hasil simulasi: {run.scenario.name}</h2><span className="subtle-badge">Data {run.data_source === 'synthetic' ? 'sintetis' : 'PuTI'}</span></div>

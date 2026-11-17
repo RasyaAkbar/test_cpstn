@@ -3,6 +3,7 @@
 
 import type { Baseline, NewTask, Situation } from './api';
 import { SITUATION_ORDER, SITUATIONS, type FieldSpec } from './situations';
+import { Button } from '../../shared/ui';
 
 export type Draft = { name: string; description: string; parameters: Record<string, unknown> & { situation: Situation } };
 
@@ -108,9 +109,9 @@ function ChangeRequestEditor({ baseline, params, setParam }: CrProps) {
         <label className="field"><span>Estimasi (hari-orang)</span><input type="number" min={0.5} max={200} step={0.5} value={task.estimated_days} onChange={(e) => setTask(i, { estimated_days: Number(e.target.value) })} /></label>
         <label className="field"><span>Dikerjakan oleh</span><select value={task.assignee_id ?? ''} onChange={(e) => setTask(i, { assignee_id: e.target.value || null })}><option value="">Otomatis (role sama, beban terkecil)</option>{baseline.resources.map((r) => <option key={r.resource_id} value={r.resource_id}>{r.resource_name}</option>)}</select></label>
         <label className="field"><span>Setelah task</span><select value={task.depends_on_task_ids[0] ?? ''} onChange={(e) => setTask(i, { depends_on_task_ids: e.target.value ? [e.target.value] : [] })}><option value="">— tanpa dependency</option><TaskOptions baseline={baseline} projectId={projectId} /></select></label>
-        <button type="button" className="button button-ghost" onClick={() => setParam('add_tasks', tasks.filter((_, j) => j !== i))}>Hapus baris</button>
+        <Button variant="danger" size="sm" onClick={() => setParam('add_tasks', tasks.filter((_, j) => j !== i))}>Hapus baris</Button>
       </div>)}
-      <button type="button" className="button button-ghost" onClick={() => setParam('add_tasks', [...tasks, blank])}>+ Tambah task</button>
+      <Button variant="outline" size="sm" onClick={() => setParam('add_tasks', [...tasks, blank])}>+ Tambah task</Button>
     </fieldset>
     <fieldset className="field-wide sim-subform">
       <legend>Task yang di-drop</legend>

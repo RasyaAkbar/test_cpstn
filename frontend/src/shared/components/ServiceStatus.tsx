@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiGet } from '../api/client';
+import { Button } from '../ui';
 
 type Health = { status: 'ok' };
 
@@ -20,6 +21,6 @@ export function ServiceStatus() {
 
   return <div className={`service-status ${status}`}>
     <span role="status"><span className="status-dot" />{status === 'checking' ? 'Memeriksa API…' : status === 'online' ? 'API terhubung' : 'API belum terhubung'}</span>
-    {status === 'offline' && <button type="button" className="button button-ghost" onClick={() => { setStatus('checking'); setAttempt(attempt + 1); }}>Coba lagi</button>}
+    {status === 'offline' && <Button variant="outline" size="sm" onClick={() => { setStatus('checking'); setAttempt(attempt + 1); }}>Coba lagi</Button>}
   </div>;
 }
