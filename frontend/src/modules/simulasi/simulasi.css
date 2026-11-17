@@ -1,50 +1,390 @@
-/* Tata letak halaman Simulasi. PEMILIK: Orang 1 — Frontend. */
-.sim-page { display: flex; flex-direction: column; gap: var(--space-7); }
-.sim-context { display: flex; flex-wrap: wrap; gap: var(--space-3); }
-.sim-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: var(--space-7); align-items: start; }
+/* Simulasi workspace — Linear × Jira
+   PEMILIK: Orang 1 — Frontend. */
 
-/* Daftar skenario tersimpan */
-.sim-list ul { list-style: none; margin: 0; padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
-.sim-list-item { width: 100%; display: flex; flex-direction: column; gap: var(--space-1); text-align: left; padding: var(--space-3) var(--space-4); border: 1px solid transparent; border-radius: var(--radius-control); background: none; color: var(--color-heading); font: var(--text-body); }
-.sim-list-item small { font: var(--text-body-sm); color: var(--color-muted); }
-.sim-list-item:hover { background: var(--color-bg); }
-.sim-list-item.active { background: var(--color-primary-light); border-color: var(--color-primary-light); }
-.sim-list-item.active strong { color: var(--color-primary); }
-
-/* Form skenario */
-.sim-editor { display: flex; flex-direction: column; gap: var(--space-6); padding: var(--space-6) var(--space-7); }
-.sim-subform { border: 1px solid var(--color-border); border-radius: var(--radius-card); padding: var(--space-5); margin: 0; display: flex; flex-direction: column; gap: var(--space-4); }
-.sim-subform legend { font: var(--text-label); color: var(--color-heading); padding: 0 var(--space-2); }
-.sim-subform-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-4); align-items: end; padding-bottom: var(--space-4); border-bottom: 1px dashed var(--color-border); }
-.sim-subform .button { align-self: flex-start; }
-.sim-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); padding-top: var(--space-5); border-top: 1px solid var(--color-border); }
-
-/* Hasil simulasi */
-.sim-result { display: flex; flex-direction: column; gap: var(--space-8); padding: var(--space-6) var(--space-7); }
-.result-block { display: flex; flex-direction: column; gap: var(--space-4); }
-.result-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-4); }
-.sim-result .metric-grid { margin-bottom: 0; }
-
-.legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); font: var(--text-body-sm); color: var(--color-muted); }
-.legend-bar { display: inline-block; width: 18px; height: 6px; border-radius: var(--radius-pill); }
-.legend-baseline, .gantt-baseline { background: var(--color-border); }
-.legend-scenario, .gantt-scenario { background: var(--color-primary); }
-
-.gantt-col { width: 40%; min-width: 220px; }
-.gantt-track { position: relative; height: 22px; }
-.gantt-bar { position: absolute; height: 7px; border-radius: var(--radius-pill); }
-.gantt-baseline { top: 3px; }
-.gantt-scenario { top: 12px; }
-
-.heatmap td.heat { min-width: 44px; font: var(--text-data); }
-.heat-zero { color: var(--color-muted); }
-.heat-low { background: #f0f7f4; }
-.heat-mid { background: var(--color-primary-light); color: var(--color-primary); }
-.heat-high { background: #faf1e4; color: var(--color-warning); font-weight: 600; }
-
-@media (max-width: 1100px) {
-  .sim-layout { grid-template-columns: minmax(0, 1fr); }
+/* Workspace */
+.sim-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
+
+/* Baseline metadata */
+.sim-context {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sim-data-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--color-heading);
+  font-weight: 500;
+}
+
+.sim-status-dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+
+.sim-context-divider {
+  width: 1px;
+  height: 13px;
+  background: var(--color-border);
+}
+
+.sim-meta-separator {
+  margin: 0 7px;
+  color: var(--color-muted);
+}
+
+/* Connected scenario workspace */
+.sim-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 0;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+}
+
+.sim-layout > .module-panel {
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Scenario navigation */
+.sim-list {
+  border-right: 1px solid var(--color-border);
+  background: var(--color-bg);
+}
+
+.sim-list .panel-heading {
+  padding: 18px 16px;
+}
+
+.sim-list ul {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 8px;
+  list-style: none;
+}
+
+.sim-list-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--color-heading);
+  font: var(--text-body);
+  cursor: pointer;
+}
+
+.sim-list-item strong {
+  font-weight: 500;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.sim-list-item small {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+
+.sim-list-item:hover,
+.sim-list-item.active {
+  background: #f3f4f6;
+}
+
+.sim-list-item.active {
+  border-color: transparent;
+}
+
+.sim-list-item.active strong {
+  color: var(--color-heading);
+}
+
+.sim-list-item:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+/* Scenario editor header */
+.sim-layout > section .panel-heading {
+  padding: 20px 24px;
+}
+
+.sim-editor-heading {
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.sim-editor-heading-content {
+  min-width: 0;
+  flex: 1;
+}
+
+.sim-editor-heading h2 {
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.sim-editor-subtitle {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-muted);
+}
+
+.sim-scenario-id {
+  flex-shrink: 0;
+  max-width: 45%;
+  padding-top: 3px;
+  font-size: 11px;
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+/* Scenario form */
+.sim-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px;
+}
+
+.sim-subform {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  margin: 0;
+  padding: 20px 0 0;
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  border-radius: 0;
+}
+
+.sim-subform legend {
+  padding: 0 10px 0 0;
+  font: var(--text-label);
+  font-weight: 600;
+  color: var(--color-heading);
+}
+
+.sim-subform-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  align-items: end;
+  gap: var(--space-4);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px dashed var(--color-border);
+}
+
+.sim-subform .button {
+  align-self: flex-start;
+}
+
+/* Scenario action bar */
+.sim-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-border);
+}
+
+.sim-actions-secondary,
+.sim-actions-primary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sim-actions-secondary {
+  margin-right: auto;
+}
+
+.sim-actions-primary {
+  margin-left: auto;
+}
+
+/* Simulation results */
+.sim-page > section.module-panel {
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.sim-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-6) var(--space-7);
+}
+
+.result-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.result-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.sim-result .metric-grid {
+  margin-bottom: 0;
+}
+
+/* Chart legend and Gantt */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  font: var(--text-body-sm);
+  color: var(--color-muted);
+}
+
+.legend-bar {
+  display: inline-block;
+  width: 18px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+}
+
+.legend-baseline,
+.gantt-baseline {
+  background: var(--color-border);
+}
+
+.legend-scenario,
+.gantt-scenario {
+  background: var(--color-primary);
+}
+
+.gantt-col {
+  width: 40%;
+  min-width: 220px;
+}
+
+.gantt-track {
+  position: relative;
+  height: 22px;
+}
+
+.gantt-bar {
+  position: absolute;
+  height: 7px;
+  border-radius: var(--radius-pill);
+}
+
+.gantt-baseline {
+  top: 3px;
+}
+
+.gantt-scenario {
+  top: 12px;
+}
+
+/* Resource heatmap */
+.heatmap td.heat {
+  min-width: 44px;
+  font: var(--text-data);
+}
+
+.heat-zero {
+  color: var(--color-muted);
+}
+
+.heat-low {
+  background: #f0f7f4;
+}
+
+.heat-mid {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.heat-high {
+  background: #faf1e4;
+  color: var(--color-warning);
+  font-weight: 600;
+}
+
+/* Responsive */
+@media (max-width: 1100px) {
+  .sim-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sim-list {
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+}
+
 @media (max-width: 760px) {
-  .sim-editor, .sim-result { padding: var(--space-5); }
+  .sim-context {
+    gap: 8px;
+  }
+
+  .sim-context-divider {
+    display: none;
+  }
+
+  .sim-editor,
+  .sim-result {
+    padding: 20px 16px;
+  }
+
+  .sim-layout > section .panel-heading {
+    padding: 16px;
+  }
+
+  .sim-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sim-actions-secondary,
+  .sim-actions-primary {
+    margin: 0;
+  }
+
+  .sim-actions-primary {
+    justify-content: flex-end;
+  }
 }

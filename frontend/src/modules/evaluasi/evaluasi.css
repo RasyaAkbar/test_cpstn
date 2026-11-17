@@ -1,24 +1,341 @@
-/* Tata letak halaman Evaluasi. PEMILIK: Orang 1 — Frontend. */
-.eval-page { display: flex; flex-direction: column; gap: var(--space-7); }
-.eval-controls { display: grid; grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); gap: var(--space-6) var(--space-8); padding: var(--space-6) var(--space-7); }
-.eval-controls .check-list legend { margin-bottom: var(--space-3); }
-.eval-submit { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-4); padding-top: var(--space-5); border-top: 1px solid var(--color-border); }
+/* Evaluasi — Linear × Jira
+   PEMILIK: Orang 1 — Frontend. */
 
-.eval-best { margin: var(--space-6) var(--space-7) 0; padding: var(--space-4) var(--space-5); border-radius: var(--radius-card); background: var(--color-primary-light); color: var(--color-primary); }
-.eval-best p { font: var(--text-body-sm); color: var(--color-body); margin-top: var(--space-2); }
-.module-panel > .table-scroll { padding: var(--space-5) var(--space-7) 0; }
+/* Page layout */
+.eval-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
 
-.kpi-table tbody th { font: var(--text-label); color: var(--color-heading); min-width: 220px; }
-.kpi-table td strong { font: var(--text-data); color: var(--color-heading); }
-.kpi-table td { white-space: nowrap; }
-.kpi-table .is-best { background: #f0f7f4; }
-.kpi-table thead .is-best { color: var(--color-primary); }
+/* Configuration panel */
+.eval-page > .module-panel {
+  border-radius: 10px;
+  box-shadow: none;
+}
 
-.eval-footnote { padding: var(--space-4) var(--space-7) var(--space-6); }
+.eval-page > .module-panel > .panel-heading {
+  padding: 20px 24px;
+}
 
+.eval-page > .module-panel > .panel-heading h2 {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.eval-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(240px, 1fr);
+  gap: 0;
+  padding: 0;
+  align-items: stretch;
+  border-top: 1px solid var(--color-border);
+}
+
+/* Scenario selection */
+.eval-controls .check-list {
+  min-width: 0;
+  margin: 0;
+  padding: 24px;
+  border: 0;
+}
+
+.eval-controls .check-list legend {
+  margin-bottom: 12px;
+  padding: 0;
+  font: var(--text-label);
+  color: var(--color-muted);
+}
+
+.eval-controls .field-check {
+  margin-bottom: 8px;
+}
+
+/* Monte Carlo configuration */
+.eval-replications {
+  min-width: 0;
+  margin: 0;
+  padding: 24px;
+  border-left: 1px solid var(--color-border);
+}
+
+.eval-replications > span {
+  font-weight: 600;
+}
+
+.eval-replications input {
+  max-width: 180px;
+}
+
+.eval-replications small {
+  display: block;
+  max-width: 320px;
+  line-height: 1.6;
+  color: var(--color-muted);
+}
+
+/* Comparison action */
+.eval-submit {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--color-border);
+}
+
+.eval-submit .notice {
+  align-self: stretch;
+}
+
+/* Ranking summary: relative ranking, not guaranteed baseline improvement */
+.eval-best {
+  margin: 0;
+  padding: 18px 24px;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-heading);
+}
+
+.eval-best-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.eval-best-heading strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.eval-best-indicator {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+
+.eval-best p {
+  margin: 6px 0 0 17px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-muted);
+}
+
+.eval-best .eval-best-note {
+  color: var(--color-muted);
+}
+
+.eval-best .eval-ranking-warning {
+  margin: 12px 0 0 17px;
+  padding: 10px 12px;
+  border-left: 2px solid var(--color-warning);
+  border-radius: 0 4px 4px 0;
+  background: #faf7f1;
+  color: var(--color-body);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* Tables within Evaluasi only */
+.eval-page .module-panel > .table-scroll {
+  padding: 20px 24px 0;
+}
+
+/* KPI comparison table */
+.kpi-table th,
+.kpi-table td {
+  padding: 12px 14px;
+  vertical-align: middle;
+}
+
+.kpi-table thead th {
+  font-size: 11px;
+  line-height: 1.5;
+  vertical-align: top;
+}
+
+.kpi-table tbody th {
+  min-width: 220px;
+  font: var(--text-label);
+  line-height: 1.5;
+  color: var(--color-heading);
+}
+
+.kpi-table tbody th small {
+  display: block;
+  margin-top: 3px;
+  font-weight: 400;
+  color: var(--color-muted);
+}
+
+.kpi-table td {
+  white-space: nowrap;
+}
+
+.kpi-table td strong {
+  font: var(--text-data);
+  color: var(--color-heading);
+}
+
+.kpi-table td small {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--color-muted);
+}
+
+.kpi-table td .delta {
+  margin-left: 5px;
+  font-size: 11px;
+}
+
+.kpi-table .is-best {
+  background: rgba(200, 16, 46, 0.025);
+}
+
+.kpi-table thead .is-best {
+  color: var(--color-heading);
+}
+
+.eval-column-name {
+  display: block;
+  font-weight: 600;
+}
+
+.eval-column-best {
+  display: inline-block;
+  margin-top: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+/* Project launch evaluation */
+.eval-project-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  min-width: 140px;
+}
+
+.eval-project-cell strong {
+  font: var(--text-data);
+  font-weight: 600;
+  color: var(--color-heading);
+}
+
+.eval-project-status {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.eval-project-status.is-on-target {
+  color: var(--color-muted);
+}
+
+.eval-project-status.is-delayed {
+  color: var(--color-danger, #c8102e);
+}
+
+.eval-project-cell small {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--color-muted);
+}
+
+/* Member workload */
+.eval-workload-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 115px;
+}
+
+.eval-workload-value {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.eval-workload-value strong {
+  font: var(--text-data);
+  font-weight: 600;
+  color: var(--color-heading);
+}
+
+.eval-overload-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-danger, #c8102e);
+}
+
+.eval-workload-track {
+  width: 100%;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-border);
+}
+
+.eval-workload-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #94a3b8;
+}
+
+.eval-workload-fill.is-overloaded {
+  background: var(--color-danger, #c8102e);
+}
+
+/* Supporting notes */
+.eval-footnote {
+  padding: 16px 24px 24px;
+}
+
+/* Responsive */
 @media (max-width: 760px) {
-  .eval-controls { grid-template-columns: minmax(0, 1fr); padding: var(--space-5); }
-  .eval-best { margin: var(--space-5) var(--space-5) 0; }
-  .module-panel > .table-scroll { padding: var(--space-4) var(--space-5) 0; }
-  .eval-footnote { padding: var(--space-4) var(--space-5) var(--space-5); }
+  .eval-page > .module-panel > .panel-heading {
+    padding: 16px;
+  }
+
+  .eval-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .eval-controls .check-list {
+    padding: 20px 16px;
+  }
+
+  .eval-replications {
+    padding: 20px 16px;
+    border-left: 0;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .eval-submit {
+    padding: 16px;
+  }
+
+  .eval-best {
+    padding: 16px;
+  }
+
+  .eval-page .module-panel > .table-scroll {
+    padding: 16px 16px 0;
+  }
+
+  .eval-footnote {
+    padding: 16px;
+  }
 }
