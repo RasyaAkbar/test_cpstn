@@ -71,7 +71,7 @@ def _check_date(s: Snapshot, value: date, label: str) -> None:
 def _assigned_effort(s: Snapshot, resource_id: str) -> float:
     open_ids = {t.task_id for t in s.open_tasks()}
     return sum(
-        s.task_by_id[a.task_id].estimated_days
+        s.task_by_id[a.task_id].remaining_days
         for a in s.assignments
         if a.resource_id == resource_id and a.task_id in open_ids and a.released_date is None
     )
@@ -265,6 +265,7 @@ def _apply_rotation(s: Snapshot, p: RotationParams) -> Snapshot:
 
 
 def _apply_task_overrun(s: Snapshot, p: TaskOverrunParams) -> Snapshot:
+    """Estimasi total baru; task yang sudah berjalan tetap menyisakan porsi remaining_share."""
     _open_task(s, p.task_id)
     tasks = tuple(
         replace(t, estimated_days=p.revised_estimated_days) if t.task_id == p.task_id else t

@@ -2,7 +2,8 @@
    PEMILIK: Orang 1 — Frontend. */
 
 const dateFormat = new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
-const numberFormat = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 });
+// 2 desimal: indeks KPI seperti RLI dan WBI bernilai sekitar 0–3.
+const numberFormat = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 2 });
 
 /** "2026-11-04" → "4 Nov 2026". Tanggal ISO dibaca sebagai tanggal lokal, bukan UTC. */
 export function formatDate(iso: string | null | undefined): string {

@@ -210,6 +210,8 @@ class Option(BaseModel):
 class BaselineResponse(BaseModel):
     data_source: str
     start_date: date
+    as_of: date | None = None  # tanggal observasi terakhir di dataset
+    notes: list[str] = []  # cara data disiapkan untuk simulasi (asumsi yang perlu dicek)
     projects: list[BaselineProject]
     resources: list[BaselineResource]
     tasks: list[BaselineTask]

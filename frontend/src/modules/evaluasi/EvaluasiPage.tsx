@@ -4,9 +4,10 @@
 
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { compareScenarios, getKpiDefinitions, MAX_COMPARED_SCENARIOS, type CompareResponse, type KpiDefinition } from './api';
+import { compareScenarios, getHistorical, getKpiDefinitions, MAX_COMPARED_SCENARIOS, type CompareResponse, type Historical, type KpiDefinition } from './api';
 import { listScenarios, type Scenario } from '../simulasi/api';
 import { SITUATIONS } from '../simulasi/situations';
+import { HistoricalPanel } from './HistoricalPanel';
 import { KpiComparison } from './KpiComparison';
 import { Button } from '../../shared/ui';
 import './evaluasi.css';
@@ -19,9 +20,14 @@ export function EvaluasiPage() {
   const [definitions, setDefinitions] = useState<KpiDefinition[]>([]);
   const [chosen, setChosen] = useState<string[]>([]);
   const [replications, setReplications] = useState(100);
+  const [threshold, setThreshold] = useState(1);
   const [result, setResult] = useState<CompareResponse | null>(null);
+  const [historical, setHistorical] = useState<Historical | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // KPI historis tidak bergantung pada skenario; gagal memuatnya tidak menghalangi perbandingan.
+  useEffect(() => { getHistorical().then(setHistorical).catch(() => setHistorical(null)); }, []);
 
   useEffect(() => {
     Promise.all([listScenarios(), getKpiDefinitions()])
@@ -38,7 +44,7 @@ export function EvaluasiPage() {
 
   const runComparison = async () => {
     setBusy(true); setError(null);
-    try { setResult(await compareScenarios({ scenario_ids: chosen, replications })); } catch (e) { setError(message(e)); } finally { setBusy(false); }
+    try { setResult(await compareScenarios({ scenario_ids: chosen, replications, overload_threshold: threshold })); } catch (e) { setError(message(e)); } finally { setBusy(false); }
   };
 
   if (scenarios === null) return <section className="module-panel"><div className="empty-state"><p>{error ?? 'Memuat skenario…'}</p></div></section>;
@@ -61,7 +67,11 @@ export function EvaluasiPage() {
         </fieldset>
         <label className="field eval-replications"><span>Replikasi Monte Carlo</span>
           <input type="number" min={0} max={1000} step={50} value={replications} onChange={(e) => setReplications(Number(e.target.value))} />
-          <small>0 = hanya estimasi tunggal. 100–500 replikasi menampilkan median dan rentang P10–P90 (lebih lama).</small>
+          <small>0 = hanya estimasi tunggal. 100 replikasi (bawaan FR-04.2) menampilkan median, rentang P10–P90, dan peluang tepat waktu (lebih lama).</small>
+        </label>
+        <label className="field eval-replications"><span>Threshold overload RLI</span>
+          <input type="number" min={0.1} max={10} step={0.1} value={threshold} onChange={(e) => setThreshold(Number(e.target.value))} />
+          <small>RLI di atas nilai ini dihitung overload (FR-04.4). Bawaan 1,0.</small>
         </label>
         <div className="eval-submit">
           {tooMany && <p className="notice notice-warning">Pilih maksimal {MAX_COMPARED_SCENARIOS} skenario.</p>}
@@ -78,5 +88,6 @@ export function EvaluasiPage() {
       </form>
     </section>
     {result && <KpiComparison result={result} definitions={definitions} />}
+    {historical && <HistoricalPanel data={historical} />}
   </div>;
 }

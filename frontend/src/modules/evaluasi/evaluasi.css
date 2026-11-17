@@ -260,6 +260,21 @@
   min-width: 115px;
 }
 
+.eval-history { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); padding: var(--space-6) var(--space-7) 0; }
+.eval-history-block { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.eval-history-block h3 { font: var(--text-label); color: var(--color-heading); }
+.eval-notes { padding: var(--space-5) var(--space-7) var(--space-6); font: var(--text-body-sm); }
+.eval-notes summary { cursor: pointer; color: var(--color-primary); }
+.eval-notes ul { margin-top: var(--space-3); padding-left: var(--space-6); list-style: disc; }
+
+@media (max-width: 760px) {
+  .eval-history { grid-template-columns: minmax(0, 1fr); padding: var(--space-5) var(--space-5) 0; }
+  .eval-notes { padding: var(--space-4) var(--space-5) var(--space-5); }
+  .eval-controls { grid-template-columns: minmax(0, 1fr); padding: var(--space-5); }
+  .eval-best { margin: var(--space-5) var(--space-5) 0; }
+  .module-panel > .table-scroll { padding: var(--space-4) var(--space-5) 0; }
+  .eval-footnote { padding: var(--space-4) var(--space-5) var(--space-5); }
+}
 .eval-workload-value {
   display: flex;
   align-items: center;
@@ -338,4 +353,4 @@
   .eval-footnote {
     padding: 16px;
   }
-}
+

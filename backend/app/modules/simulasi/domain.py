@@ -14,6 +14,15 @@ from dataclasses import dataclass
 from datetime import date
 from functools import cached_property
 
+# Status task yang sudah dikerjakan di baseline (tasks.csv). Task berstatus ini dihitung
+# "aktif" sejak hari ke-0 simulasi pada Resource Load Index (FR-04.3).
+STARTED_STATUSES = ("in_progress", "in_qa", "blocked")
+
+# Bobot tiga kategori beban PuTI pada Resource Load Index (FR-04.3): Work Planned (task
+# proyek aktif), Work Operational (item operasional), Work Target (tiket terbuka).
+# Dipakai KPI (evaluasi/kpi.py) dan penyiapan baseline (db_baseline.py) agar konsisten.
+WORK_WEIGHTS = {"project": 1.0, "operational": 0.5, "ticket": 0.3, "hotfix": 0.3}
+
 
 @dataclass(frozen=True)
 class Project:  # projects.csv
@@ -28,9 +37,11 @@ class Project:  # projects.csv
 class Role:  # roles.csv
     role_id: str
     role_name: str
-    # Hari-orang kerja proyek per hari kerja (0..1). Sisa hari dipakai operasional
-    # rutin, sesuai tiga jenis aktivitas yang dilaporkan PuTI (Tabel 1.1).
-    capacity_reference: float
+    # [sim] Hari-orang kerja per hari kerja (0..1) yang dipakai mesin simulasi.
+    daily_capacity: float
+    # roles.capacity_reference: jumlah beban setara task proyek yang bisa dipegang
+    # bersamaan; penyebut Resource Load Index (FR-04.3, bawaan 3.0).
+    capacity_reference: float = 3.0
 
 
 @dataclass(frozen=True)
@@ -45,6 +56,10 @@ class Resource:  # resources.csv
     onboarding_days: int = 0  # [sim] hari kerja ramp-up anggota baru
     initial_capacity: float = 1.0  # [sim] faktor kapasitas di hari pertama onboarding
     leave_date: date | None = None  # [sim] tanggal keluar dari unit (withdrawal)
+    # [sim] Porsi hari yang rutin habis untuk tiket dan operasional (business as usual),
+    # diturunkan dari workload_items.csv. Mengurangi kapasitas proyek dan menjadi bagian
+    # tiket/operasional pada RLI.
+    bau_share: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -64,10 +79,19 @@ class Task:  # tasks.csv
     required_role_id: str
     complexity_id: str
     priority_rank: int
-    estimated_days: float  # effort dalam hari-orang pada kapasitas penuh
+    estimated_days: float  # effort total dalam hari-orang pada kapasitas penuh
     phase: str = ""
-    status: str = "todo"  # todo | in_progress | done
+    # Status tasks.csv (not_started, in_progress, in_qa, blocked, on_hold, done) atau
+    # todo/done di data sintetis. Hanya "done" yang tidak dijadwalkan.
+    status: str = "todo"
     earliest_start: date | None = None  # [sim] task CR tidak bisa mulai sebelum tanggal CR
+    # [sim] Porsi effort yang masih tersisa saat snapshot (1.0 = belum dikerjakan).
+    remaining_share: float = 1.0
+    planned_finish: date | None = None  # untuk keterlambatan task pada CDI (FR-04.7)
+
+    @property
+    def remaining_days(self) -> float:
+        return self.estimated_days * self.remaining_share
 
 
 @dataclass(frozen=True)
@@ -132,6 +156,20 @@ class Mentorship:  # [sim] dari skenario anggota baru
 
 
 @dataclass(frozen=True)
+class TaskRecord:  # tasks.csv apa adanya, untuk KPI historis (EAR FR-04.8, rework FR-04.9)
+    task_id: str
+    project_id: str
+    project_name: str
+    required_role_id: str
+    complexity_id: str
+    estimated_days: float
+    status: str
+    actual_start: date | None
+    actual_finish: date | None
+    qa_reject_count: int
+
+
+@dataclass(frozen=True)
 class Snapshot:
     """Baseline lengkap yang disimulasikan (langkah 1 desain IV.2.3)."""
 
@@ -150,6 +188,9 @@ class Snapshot:
     blocks: tuple[Block, ...] = ()
     mentorships: tuple[Mentorship, ...] = ()
     removed_task_ids: tuple[str, ...] = ()  # task yang di-drop skenario (dipakai KPI)
+    as_of: date | None = None  # tanggal observasi terakhir di dataset
+    notes: tuple[str, ...] = ()  # cara data disiapkan untuk simulasi; ditampilkan ke pengguna
+    history: tuple[TaskRecord, ...] = ()  # semua task dataset, termasuk proyek yang sudah rilis
 
     # Indeks pencarian. cached_property aman pada dataclass frozen tanpa slots.
     @cached_property

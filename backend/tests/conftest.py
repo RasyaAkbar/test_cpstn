@@ -12,7 +12,11 @@ from datetime import date
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
 
+from app.db.base import Base
 from app.main import app
 from app.modules.simulasi.baseline import get_baseline_snapshot
 from app.modules.simulasi.domain import (
@@ -50,6 +54,25 @@ def make_snapshot(**overrides) -> Snapshot:
 @pytest.fixture
 def tiny_snapshot() -> Snapshot:
     return make_snapshot()
+
+
+@pytest.fixture
+def db_session():
+    """SQLite in-memory dengan tabel dataset dan foreign key aktif (tes modul Data)."""
+    engine = create_engine(
+        "sqlite+pysqlite://",
+        poolclass=StaticPool,
+        connect_args={"check_same_thread": False},
+    )
+
+    @event.listens_for(engine, "connect")
+    def _enable_foreign_keys(connection, _record):
+        connection.execute("PRAGMA foreign_keys=ON")
+
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        yield session
+    engine.dispose()
 
 
 @pytest.fixture

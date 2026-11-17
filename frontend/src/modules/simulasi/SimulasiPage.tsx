@@ -122,28 +122,10 @@ export function SimulasiPage() {
 
   const saved = selected !== NEW;
   return <div className="sim-page">
-
-    <div className="sim-context" aria-label="Informasi baseline">
-      <span className="sim-data-source">
-        <span className="sim-status-dot" aria-hidden="true" />
-        {baseline.data_source === 'synthetic'
-          ? 'Data sintetis'
-          : 'Data PuTI'}
-      </span>
-
-      <span className="sim-context-divider" aria-hidden="true" />
-
-      <span>Baseline: {formatDate(baseline.start_date)}</span>
-
-      <span className="sim-context-divider" aria-hidden="true" />
-
-      <span>
-        {baseline.projects.length} proyek
-        <span className="sim-meta-separator">·</span>
-        {baseline.resources.length} anggota
-        <span className="sim-meta-separator">·</span>
-        {baseline.tasks.length} task
-      </span>
+    <div className="sim-context">
+      <span className="badge badge-accent">Sumber data: {baseline.data_source === 'synthetic' ? 'sintetis' : 'PuTI'}</span>
+      <span className="badge" title={baseline.notes.join('\n')}>{baseline.as_of && <>Data per {formatDate(baseline.as_of)} · </>}Baseline mulai {formatDate(baseline.start_date)}</span>
+      <span className="badge">{baseline.projects.length} proyek · {baseline.resources.length} anggota · {baseline.tasks.length} task</span>
     </div>
 
 

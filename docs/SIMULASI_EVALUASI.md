@@ -11,15 +11,21 @@ Dokumen ini memetakan kode Iterasi 1 (scenario setup + what-if simulation) dan I
 ## Alur data
 
 ```text
-baseline.py ──► rules.apply_scenario() ──► engine.run_simulation() / run_replications()
- (Orang 2)        salinan baseline            SimulationResult (kontrak Orang 2 → Orang 3)
+puti_datasets.xlsx ──► data/importer.py ──► PostgreSQL (11 tabel dataset + dataset_imports)
+                                                 │
+                         db_baseline.snapshot_from_rows()  ← baseline.get_baseline_snapshot()
+                                                 │            (cache per import)
+baseline Snapshot ──► rules.apply_scenario() ──► engine.run_simulation() / run_replications()
+ (Orang 2)              salinan baseline            SimulationResult (kontrak Orang 2 → Orang 3)
                                                      │
                                   ┌──────────────────┴──────────────────┐
                     service.run_response() (Orang 2)       kpi.compute_kpis() (Orang 3)
                     POST /simulasi/scenarios/{id}/run      comparison.compare() → POST /evaluasi/compare
-                                  │                                     │
-                    SimulationResultView.tsx (Orang 1)     KpiComparison.tsx (Orang 1)
+                                  │                        historical.historical_kpis() → GET /evaluasi/historical
+                    SimulationResultView.tsx (Orang 1)     KpiComparison.tsx, HistoricalPanel.tsx (Orang 1)
 ```
+
+Baseline API selalu dibaca dari import terakhir di database. Jika belum ada import, endpoint simulasi/evaluasi menjawab 503 dengan perintah importer yang perlu dijalankan.
 
 Kontrak antar orang:
 
@@ -31,9 +37,10 @@ Kontrak antar orang:
 
 | File | Bagian / fungsi | Fungsi dalam desain |
 | --- | --- | --- |
-| `domain.py` | `Project`, `Role`, `Resource`, `Task`, `Dependency`, `Assignment`, `Availability`, `Holiday`, `WorkloadItem`, `Snapshot` | Model baseline sesuai kolom Tabel 4.3 (langkah 1 IV.2.3). Field `[sim]` bukan kolom CSV PuTI. |
-| `synthetic_data.py` | `build_synthetic_snapshot()` | Data sintetis: 3 proyek, 8 anggota (pseudonim), 27 task. |
-| `baseline.py` | `get_baseline_snapshot()` | Satu-satunya titik masuk baseline; ganti di sini saat data PuTI tersedia. |
+| `domain.py` | `Project`, `Role`, `Resource`, `Task`, `Dependency`, `Assignment`, `Availability`, `Holiday`, `WorkloadItem`, `TaskRecord`, `Snapshot`, `WORK_WEIGHTS` | Model baseline sesuai kolom Tabel 4.3 (langkah 1 IV.2.3). Field `[sim]` bukan kolom CSV PuTI. |
+| `db_baseline.py` | `snapshot_from_rows()`, `bau_shares()`, `blocker_days()`, `REMAINING_SHARE` | Menyiapkan Snapshot dari tabel dataset: tanggal mulai, sisa effort, porsi BAU, role dari assignment. Asumsinya juga dikirim ke layar lewat `Snapshot.notes`. |
+| `baseline.py` | `get_baseline_snapshot()` | Satu-satunya titik masuk baseline: import terakhir di database, di-cache per import. |
+| `synthetic_data.py` | `build_synthetic_snapshot()` | Data sintetis kecil untuk tes: 3 proyek, 8 anggota (pseudonim), 27 task. |
 | `schemas.py` | `ChangeRequestParams` … `CriticalBugParams`, `ScenarioInput`, `Scenario` | Parameter 8 situasi (Tabel 4.2/4.4), FR-01/FR-02. |
 | `schemas.py` | `BaselineResponse`, `SimulationRunResponse`, `ProjectOutcome`, `TaskChange`, `ResourceLoad` | Respons API untuk form dan hasil simulasi (FR-04). |
 | `store.py` | `ScenarioStore.create/update/delete/duplicate` | Simpan dan duplikat skenario (FR-02, UC-02). |
@@ -59,31 +66,35 @@ Endpoint:
 
 | File | Bagian / fungsi | Fungsi dalam desain |
 | --- | --- | --- |
-| `kpi.py` | `KPI_DEFINITIONS` | **Definisi KPI**: kunci, label, satuan, arah lebih baik, penjelasan (dari "Candidate KPIs" I.4.2). |
-| `kpi.py` | `project_kpis()` | Tanggal selesai proyek, keterlambatan, target launch tercapai atau tidak. |
-| `kpi.py` | `member_loads()` | Beban anggota terhadap kapasitas sampai target proyeknya. |
-| `kpi.py` | `tasks_delayed_by_dependency()`, `tasks_dropped_or_deferred()` | KPI dependency dan task di-drop/lewat target. |
+| `kpi.py` | `KPI_DEFINITIONS` | **Definisi KPI**: kunci, nomor FR, label, satuan, arah lebih baik, rumus (dari "FR Dashboard Digital Twin - Formula KPI"). |
+| `kpi.py` | `project_kpis()` | Schedule Variance per proyek dalam hari kerja (FR-04.1). |
+| `kpi.py` | `weekly_rli()`, `sustained_overload()`, `workload_balance()` | RLI mingguan, overload, SOI, WBI (FR-04.3 s.d. FR-04.6). |
+| `kpi.py` | `cascade_delay()` | Cascade Delay Impact per task (FR-04.7). |
 | `kpi.py` | `compute_kpis()` | Menghitung semua KPI satu run (FR-05, UC-05). |
-| `comparison.py` | `percentile()`, `_distribution()` | Median dan rentang P10–P90 dari replikasi. |
+| `historical.py` | `historical_kpis()` | EAR dan Rework Rate dari data aktual (FR-04.8, FR-04.9). |
+| `comparison.py` | `percentile()`, `_distribution()`, `on_time_probabilities()` | Median, P10–P90, dan On-Time Launch Probability dari replikasi (FR-04.2). |
 | `comparison.py` | `kpi_status()`, `_evaluation()` | **Perbandingan dengan baseline**: delta skenario − baseline dan status lebih baik/buruk (FR-06). |
-| `comparison.py` | `RANKING_ORDER`, `rank_scenarios()` | Skenario terbaik (UC-06). |
+| `comparison.py` | `RANKING_ORDER`, `rank_scenarios()` | Skenario terbaik (UC-06); KPI "makin besar makin baik" dibalik saat diurutkan. |
 | `comparison.py` | `compare()` | Alur lengkap perbandingan. |
-| `schemas.py` | `CompareRequest`, `CompareResponse`, `Evaluation`, `KpiValue` | Kontrak API ke frontend. |
-| `router.py` | `GET /api/v1/evaluasi/kpi-definitions`, `POST /api/v1/evaluasi/compare` | UC-05, UC-06. |
+| `schemas.py` | `CompareRequest`, `CompareResponse`, `Evaluation`, `KpiValue`, `HistoricalResponse` | Kontrak API ke frontend. |
+| `router.py` | `GET /kpi-definitions`, `POST /compare`, `GET /historical` | UC-05, UC-06. |
 
-KPI yang dihitung (semua "makin kecil makin baik"):
+KPI per skenario (dibandingkan dengan baseline):
 
-| Kunci | KPI | Dari Candidate KPIs (I.4.2) |
-| --- | --- | --- |
-| `projects_missing_target` | Proyek melewati target launch | whether the launch target still holds |
-| `total_delay_days`, `max_delay_days` | Keterlambatan terhadap target | delay in days |
-| `completion_span_days` | Durasi sampai semua proyek selesai | projected completion date |
-| `overloaded_members`, `max_member_load_pct` | Beban anggota | load per member against capacity |
-| `tasks_delayed_by_dependency` | Task tertunda karena dependency | tasks delayed through dependencies |
-| `tasks_dropped_or_deferred` | Task di-drop atau lewat target | tasks dropped or deferred |
-| `idle_capacity_days` | Kapasitas hilang karena menunggu | gap "capacity lost to dependencies" (Tabel 1.1) |
+| Kunci | FR | KPI | Lebih baik |
+| --- | --- | --- | --- |
+| `projects_late`, `sv_total_days`, `sv_max_days` | FR-04.1 | Schedule Variance: launch hasil simulasi − target (hari kerja) | kecil |
+| `on_time_probability` | FR-04.2 | Rata-rata proyek dari porsi replikasi dengan SV ≤ 0 (butuh replikasi > 0) | besar |
+| `rli_peak` | FR-04.3 | RLI = (1.0 × task aktif + 0.5 × operasional + 0.3 × tiket) / capacity_reference | kecil |
+| `overload_resource_weeks` | FR-04.4 | Pasangan (anggota, minggu) dengan RLI > threshold (bawaan 1.0, bisa diubah per perbandingan) | kecil |
+| `wbi` | FR-04.5 | 1 − CV(RLI antar anggota) per minggu, dirata-rata | besar |
+| `soi_max`, `sustained_overload_resources` | FR-04.6 | Minggu overload berturut-turut (≥ 2) × rata-rata kelebihan; episode terberat | kecil |
+| `cdi_max` | FR-04.7 | Keterlambatan task × Σ faktor propagasi ke task hilir (jalur terkuat) | kecil |
+| `blocked_ratio`, `reallocated_ratio` | FR-04.10 | Kapasitas menganggur saat menunggu / total kapasitas; waktu tunggu yang terisi task independen / total waktu tunggu | kecil / besar |
 
-Skenario terbaik diurutkan secara leksikografis: proyek melewati target → total keterlambatan → anggota overload → beban tertinggi → durasi. "Terbaik" berarti paling kecil dampaknya; keputusan tetap di Kepala Seksi dan System Analyst.
+KPI historis (sama untuk semua skenario, `GET /evaluasi/historical`): EAR (FR-04.8) = Σ durasi aktual (hari kerja) / Σ estimasi per kompleksitas dan role; Rework Rate (FR-04.9) = task dengan `qa_reject_count > 0` / task yang masuk QA, per role dan proyek.
+
+Skenario terbaik diurutkan secara leksikografis: proyek terlambat → total SV → anggota overload berkelanjutan → minggu-anggota overload → WBI. "Terbaik" berarti paling kecil dampaknya; keputusan tetap di Kepala Seksi dan System Analyst.
 
 ## Orang 1 — Frontend (`frontend/src/`)
 
@@ -96,7 +107,8 @@ Skenario terbaik diurutkan secara leksikografis: proyek melewati target → tota
 | `modules/simulasi/SimulationResultView.tsx` | `KpiSummary`, `ProjectTable`, `ScheduleTable` (Gantt), `LoadHeatmap` | Simulation result |
 | `modules/evaluasi/api.ts` | Tipe + `getKpiDefinitions`, `compareScenarios` | Kontrak ke backend Orang 3 |
 | `modules/evaluasi/EvaluasiPage.tsx` | `EvaluasiPage` (pilih skenario, jumlah replikasi) | KPI and scenario comparison |
-| `modules/evaluasi/KpiComparison.tsx` | `KpiComparison`, `KpiCell`, `ProjectCell` | KPI and scenario comparison |
+| `modules/evaluasi/KpiComparison.tsx` | `KpiComparison`, `KpiCell`, `ProjectCell`, `CascadeTable` | KPI and scenario comparison (SV, RLI/SOI, CDI) |
+| `modules/evaluasi/HistoricalPanel.tsx` | `HistoricalPanel`, `RatioTable` | EAR, Rework Rate, dan catatan penyiapan data |
 | `shared/format.ts` | `formatDate`, `formatSigned`, `addDays`, `daysBetween` | Dipakai kedua halaman |
 | `shared/api/client.ts` | `apiPost`, `apiPut`, `apiDelete`, `ApiError` | Tambahan untuk POST/PUT/DELETE |
 | `styles/components.css` | Bagian "Form, tabel, dan status" | Komponen form/tabel bersama |
@@ -106,16 +118,22 @@ Skenario terbaik diurutkan secara leksikografis: proyek melewati target → tota
 
 Asumsi ini memengaruhi angka hasil dan harus dicek saat validasi (III.3.3):
 
-1. `propagation_factor` = porsi predecessor yang harus selesai sebelum task boleh mulai (1.0 = finish-to-start penuh). `engine._schedule()`.
-2. `capacity_reference` role = hari-orang kerja proyek per hari kerja (SA 0.6, lainnya 0.8 di data sintetis). Sisanya dianggap operasional rutin.
-3. Kerja di role sekunder 75% seefektif role utama (`CROSS_ROLE_EFFICIENCY`).
-4. Onboarding naik linear dari kapasitas awal ke 100% selama `onboarding_days`; mentor kehilangan `mentor_overhead` per hari selama onboarding.
-5. Tiket dan hotfix dikerjakan sebelum task fitur; anggota lintas proyek mendahulukan proyek berprioritas tinggi.
-6. Beban anggota = pekerjaan yang ditanggung / kapasitas sampai target proyek terakhir yang ia kerjakan; overload jika > 100%.
+1. `propagation_factor` = porsi predecessor yang harus selesai sebelum task boleh mulai (hard 1.0 = finish-to-start penuh, soft 0.3). Faktor yang sama dipakai CDI. `engine._schedule()`.
+2. Simulasi mulai hari kerja setelah kejadian terakhir di dataset (`as_of` = tanggal actual/assignment/workload/change event terbaru). `db_baseline.observed_until()`.
+3. Proyek berstatus `released` dan task `dropped` tidak dijadwalkan; tetap dihitung di KPI historis.
+4. Sisa effort tanpa time tracking: `not_started`/`on_hold` 100%, `in_progress`/`blocked` 50%, `in_qa` 20% dari `estimated_days` (`REMAINING_SHARE`). Task `blocked` tertahan rata-rata `extension_days` event blocker (dibulatkan ke atas).
+5. Kapasitas harian anggota = 1 hari-orang dikurangi porsi BAU: beban historis tiket (0.3) dan operasional (0.5) selama terbuka, dibagi `capacity_reference` dan hari kerja pengamatan. Porsi yang sama menjadi komponen tiket/operasional pada RLI.
+6. `capacity_reference` role (3.0) = jumlah beban setara task proyek yang bisa dipegang bersamaan (penyebut RLI), bukan hari-orang per hari. Di data sintetis tes, kapasitas harian role tetap 0.6–0.8.
+7. Assignment dianggap benar: role yang tidak tercatat di master anggota menjadi role sekunder (efisiensi 75%, `CROSS_ROLE_EFFICIENCY`).
+8. Task proyek "aktif" pada RLI = task yang sudah berjalan di baseline (sejak hari ke-0) atau yang mulai dikerjakan di simulasi, sampai selesai.
+9. Onboarding naik linear dari kapasitas awal ke 100% selama `onboarding_days`; mentor kehilangan `mentor_overhead` per hari selama onboarding.
+10. Tiket dan hotfix dikerjakan sebelum task fitur; anggota lintas proyek mendahulukan proyek berprioritas tinggi.
+11. Semua availability (cuti, rotasi masuk/keluar) dianggap anggota tidak tersedia. Hari libur hanya yang ada di `holidays_csv`.
 
-## Batasan Iterasi 1–2
+## Batasan
 
-- Baseline masih data sintetis (`data_source = "synthetic"`, ditampilkan di setiap layar). Hasil menunjukkan perilaku sistem, bukan prakiraan proyek PuTI.
+- Di dataset saat ini semua target launch proyek aktif sudah lewat sebelum `as_of`, sehingga On-Time Launch Probability selalu 0%. KPI ini baru informatif untuk target di masa depan.
+- 100 replikasi × (baseline + 5 skenario) memakan puluhan detik untuk ~450 task terbuka. Jika perlu lebih cepat, replikasi bisa dijalankan paralel per proses.
 - Skenario disimpan di memori proses dan hilang saat backend restart. Pindahkan ke PostgreSQL (model + migrasi Alembic) dengan method `ScenarioStore` yang sama.
 - `load_weight` kompleksitas dan `task_priorities` di skenario perubahan prioritas sudah ada di kontrak API, tetapi belum dipakai di form/perhitungan.
 - Decision support (rekomendasi + alasan) dan laporan adalah Iterasi 3.
@@ -123,9 +141,10 @@ Asumsi ini memengaruhi angka hasil dan harus dicek saat validasi (III.3.3):
 ## Menjalankan dan menguji
 
 ```powershell
-# backend/
-.\.venv\Scripts\python.exe -m pytest tests/test_simulasi.py   # Orang 2
-.\.venv\Scripts\python.exe -m pytest tests/test_evaluasi.py   # Orang 3
+# backend/ — muat dataset ke database sebelum membuka halaman Simulasi/Evaluasi
+.\.venv\Scripts\python.exe -m app.modules.data.importer ..\puti_datasets.xlsx --source synthetic
+.\.venv\Scripts\python.exe -m pytest tests/test_simulasi.py tests/test_db_baseline.py   # Orang 2
+.\.venv\Scripts\python.exe -m pytest tests/test_evaluasi.py                             # Orang 3
 # frontend/
 npm run build                                                  # Orang 1
 ```

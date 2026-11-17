@@ -11,7 +11,7 @@ import { daysBetween, formatDate, formatNumber, formatSigned } from '../../share
 
 type Props = { run: SimulationRun; kpis: Evaluation | null; definitions: KpiDefinition[] };
 
-const SUMMARY_KPIS = ['projects_missing_target', 'total_delay_days', 'max_member_load_pct', 'tasks_delayed_by_dependency'];
+const SUMMARY_KPIS = ['projects_late', 'sv_total_days', 'sustained_overload_resources', 'blocked_ratio'];
 const CHANGE_LABEL: Record<TaskChange['change'], string> = { added: 'Baru', removed: 'Di-drop', shifted: 'Bergeser', unchanged: 'Tetap' };
 
 export function SimulationResultView({ run, kpis, definitions }: Props) {
