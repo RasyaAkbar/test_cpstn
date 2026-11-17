@@ -2,7 +2,8 @@
 
 Workbook uji dibuat di folder sementara dengan struktur yang sama seperti puti_datasets.xlsx
 (sheet `<tabel>_csv`), sehingga tes tidak bergantung pada file data. Database memakai SQLite
-in-memory dengan foreign key aktif; migrasi PostgreSQL diuji terpisah lewat alembic.
+in-memory dengan foreign key aktif (fixture `db_session` di conftest.py); migrasi
+PostgreSQL diuji terpisah lewat alembic.
 """
 
 from datetime import date
@@ -12,12 +13,10 @@ from unittest.mock import Mock
 import pytest
 from fastapi.testclient import TestClient
 from openpyxl import Workbook
-from sqlalchemy import CheckConstraint, create_engine, event, func, select, text
+from sqlalchemy import CheckConstraint, func, select, text
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
-from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 from app.modules.data.importer import (
@@ -240,24 +239,6 @@ def write_workbook(
 
 def validated(folder: Path, rows: dict[str, list[dict]], **kwargs):
     return validate(read_workbook(write_workbook(folder, rows, **kwargs)))
-
-
-@pytest.fixture
-def db_session():
-    engine = create_engine(
-        "sqlite+pysqlite://",
-        poolclass=StaticPool,
-        connect_args={"check_same_thread": False},
-    )
-
-    @event.listens_for(engine, "connect")
-    def _enable_foreign_keys(connection, _record):
-        connection.execute("PRAGMA foreign_keys=ON")
-
-    Base.metadata.create_all(engine)
-    with Session(engine) as session:
-        yield session
-    engine.dispose()
 
 
 @pytest.fixture

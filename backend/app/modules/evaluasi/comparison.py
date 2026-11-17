@@ -6,33 +6,42 @@ Alur compare():
   1. Jalankan baseline dan setiap skenario (deterministik + replikasi Monte Carlo).
   2. Hitung KPI tiap run dengan kpi.compute_kpis().
   3. Ringkas replikasi menjadi median, P10, P90 (agar hasil tidak tampak lebih presisi
-     daripada sebenarnya, Law 2015).
+     daripada sebenarnya, Law 2015), dan hitung On-Time Launch Probability (FR-04.2).
   4. Hitung delta skenario − baseline dan tandai lebih baik/lebih buruk.
   5. Urutkan skenario dengan RANKING_ORDER, lalu pilih skenario terbaik.
 """
 
-from app.modules.evaluasi.kpi import KPI_BY_KEY, KPI_DEFINITIONS, KpiRun, compute_kpis
+import math
+
+from app.modules.evaluasi.kpi import (
+    KPI_BY_KEY,
+    KPI_DEFINITIONS,
+    OVERLOAD_THRESHOLD,
+    KpiRun,
+    compute_kpis,
+)
 from app.modules.evaluasi.schemas import (
     CompareResponse,
     Distribution,
     Evaluation,
     KpiValue,
-    MemberLoadOut,
     ProjectKpiOut,
+    ResourceKpiOut,
+    TaskCascadeOut,
 )
 from app.modules.simulasi.domain import Snapshot
 from app.modules.simulasi.engine import SimulationResult, run_replications, run_simulation
 from app.modules.simulasi.rules import apply_scenario
 from app.modules.simulasi.schemas import Scenario
 
-# Urutan kriteria skenario terbaik (leksikografis): target launch dulu, lalu besar
-# keterlambatan, lalu beban anggota. Dipilih karena mudah dijelaskan ke stakeholder.
+# Urutan kriteria skenario terbaik (leksikografis): launch tepat waktu dulu, lalu besar
+# keterlambatan, lalu kesehatan beban tim. Dipilih karena mudah dijelaskan ke stakeholder.
 RANKING_ORDER = (
-    "projects_missing_target",
-    "total_delay_days",
-    "overloaded_members",
-    "max_member_load_pct",
-    "completion_span_days",
+    "projects_late",
+    "sv_total_days",
+    "sustained_overload_resources",
+    "overload_resource_weeks",
+    "wbi",
 )
 TOLERANCE = 1e-6
 
@@ -49,13 +58,24 @@ def percentile(values: list[float], q: float) -> float:
     return ordered[low] + (ordered[high] - ordered[low]) * (pos - low)
 
 
-def _distribution(runs: list[KpiRun], key: str) -> Distribution:
-    values = [r.values[key] for r in runs]
+def _distribution(runs: list[KpiRun], key: str) -> Distribution | None:
+    values = [r.values[key] for r in runs if r.values[key] is not None]
+    if not values:
+        return None
     return Distribution(
         median=round(percentile(values, 0.5), 2),
         p10=round(percentile(values, 0.1), 2),
         p90=round(percentile(values, 0.9), 2),
     )
+
+
+def on_time_probabilities(runs: list[KpiRun]) -> dict[str, float]:
+    """FR-04.2: porsi replikasi dengan SV ≤ 0, per proyek."""
+    hits: dict[str, int] = {}
+    for run in runs:
+        for p in run.projects:
+            hits[p.project_id] = hits.get(p.project_id, 0) + p.on_target
+    return {pid: round(n / len(runs), 3) for pid, n in hits.items()}
 
 
 # ─── Langkah 4: delta dan status terhadap baseline ──────────────────────────────
@@ -74,13 +94,19 @@ def _evaluation(
     det: SimulationResult,
     det_kpi: KpiRun,
     rep_kpis: list[KpiRun],
-    baseline_kpi: KpiRun | None,
+    baseline: Evaluation | None,
 ) -> Evaluation:
+    probability = on_time_probabilities(rep_kpis) if rep_kpis else {}
+    values = dict(det_kpi.values)
+    if probability:
+        values["on_time_probability"] = round(sum(probability.values()) / len(probability) * 100, 1)
+
+    base_values = {k.key: k.value for k in baseline.kpis} if baseline else {}
     kpis = []
     for definition in KPI_DEFINITIONS:
         key = definition.key
-        value = det_kpi.values[key]
-        delta = None if baseline_kpi is None else round(value - baseline_kpi.values[key], 2)
+        value, base = values[key], base_values.get(key)
+        delta = None if value is None or base is None else round(value - base, 2)
         kpis.append(
             KpiValue(
                 key=key,
@@ -90,24 +116,17 @@ def _evaluation(
                 status=None if delta is None else kpi_status(key, delta),
             )
         )
-    projects = []
-    for p in det_kpi.projects:
-        probability = None
-        if rep_kpis:
-            hits = sum(
-                1
-                for run in rep_kpis
-                for rp in run.projects
-                if rp.project_id == p.project_id and rp.on_target
-            )
-            probability = round(hits / len(rep_kpis), 3)
-        projects.append(ProjectKpiOut(**vars(p), on_target_probability=probability))
     return Evaluation(
         scenario_id=scenario_id,
         name=name,
         kpis=kpis,
-        projects=projects,
-        members=[MemberLoadOut(**vars(m)) for m in det_kpi.members],
+        projects=[
+            ProjectKpiOut(**vars(p), on_target_probability=probability.get(p.project_id))
+            for p in det_kpi.projects
+        ],
+        members=[ResourceKpiOut(**vars(m)) for m in det_kpi.members],
+        cascade=[TaskCascadeOut(**vars(c)) for c in det_kpi.cascade],
+        week_starts=det_kpi.week_starts,
         warnings=det.warnings,
     )
 
@@ -115,10 +134,17 @@ def _evaluation(
 # ─── Langkah 5: peringkat skenario ──────────────────────────────────────────────
 
 
+def _rank_value(key: str, value: float | None) -> float:
+    """Nilai untuk diurutkan naik: KPI "higher" dibalik, nilai kosong paling akhir."""
+    if value is None:
+        return math.inf
+    return value if KPI_BY_KEY[key].better == "lower" else -value
+
+
 def rank_scenarios(evaluations: list[Evaluation]) -> list[str]:
     def key(e: Evaluation) -> tuple:
         values = {k.key: k.value for k in e.kpis}
-        return (*(values[k] for k in RANKING_ORDER), e.scenario_id)
+        return (*(_rank_value(k, values.get(k)) for k in RANKING_ORDER), e.scenario_id)
 
     return [e.scenario_id for e in sorted(evaluations, key=key)]
 
@@ -127,31 +153,39 @@ def rank_scenarios(evaluations: list[Evaluation]) -> list[str]:
 
 
 def compare(
-    baseline: Snapshot, scenarios: list[Scenario], replications: int, seed: int
+    baseline: Snapshot,
+    scenarios: list[Scenario],
+    replications: int,
+    seed: int,
+    threshold: float = OVERLOAD_THRESHOLD,
 ) -> CompareResponse:
     """Raise ScenarioError (dari simulasi.rules) jika parameter skenario tidak valid."""
+
+    def kpis_of(result: SimulationResult, detail: bool = True) -> KpiRun:
+        return compute_kpis(result, threshold, detail)
+
+    def replicated(snapshot: Snapshot) -> list[KpiRun]:
+        # Replikasi ke-i skenario memakai angka acak per task yang sama dengan replikasi
+        # ke-i baseline (common random numbers, lihat engine.run_replications).
+        return [kpis_of(r, detail=False) for r in run_replications(snapshot, replications, seed)]
+
     base_det = run_simulation(baseline)
-    base_reps = run_replications(baseline, replications, seed)
-    base_kpi = compute_kpis(base_det, base_det)
-    base_rep_kpis = [compute_kpis(r, r) for r in base_reps]
-    baseline_eval = _evaluation(None, "Baseline", base_det, base_kpi, base_rep_kpis, None)
+    baseline_eval = _evaluation(
+        None, "Baseline", base_det, kpis_of(base_det), replicated(baseline), None
+    )
 
     evaluations = []
     for scenario in scenarios:
         snap = apply_scenario(baseline, scenario.parameters)
         det = run_simulation(snap)
-        # Replikasi ke-i skenario dibandingkan dengan replikasi ke-i baseline
-        # (angka acak per task sama, lihat engine.run_replications).
-        reps = run_replications(snap, replications, seed)
-        rep_kpis = [compute_kpis(r, ref) for r, ref in zip(reps, base_reps, strict=True)]
         evaluations.append(
             _evaluation(
                 scenario.scenario_id,
                 scenario.name,
                 det,
-                compute_kpis(det, base_det),
-                rep_kpis,
-                base_kpi,
+                kpis_of(det),
+                replicated(snap),
+                baseline_eval,
             )
         )
 
@@ -159,6 +193,7 @@ def compare(
     return CompareResponse(
         data_source=baseline.data_source,
         replications=replications,
+        overload_threshold=threshold,
         baseline=baseline_eval,
         scenarios=evaluations,
         best_scenario_id=ranking[0] if ranking else None,

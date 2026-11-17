@@ -36,7 +36,7 @@ export type Option = { id: string; name: string };
 export type BaselineProject = { project_id: string; project_name: string; priority_rank: number; start_date: string; target_launch_date: string };
 export type BaselineResource = { resource_id: string; resource_name: string; primary_role_id: string; secondary_role_ids: string[] };
 export type BaselineTask = { task_id: string; project_id: string; task_name: string; required_role_id: string; complexity_id: string; estimated_days: number; status: string; assignee_ids: string[] };
-export type Baseline = { data_source: string; start_date: string; projects: BaselineProject[]; resources: BaselineResource[]; tasks: BaselineTask[]; roles: Option[]; complexity_levels: Option[] };
+export type Baseline = { data_source: string; start_date: string; as_of: string | null; notes: string[]; projects: BaselineProject[]; resources: BaselineResource[]; tasks: BaselineTask[]; roles: Option[]; complexity_levels: Option[] };
 
 // ─── Hasil simulasi (FR-04) ─────────────────────────────────────────────────────
 

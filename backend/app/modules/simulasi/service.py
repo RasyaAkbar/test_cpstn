@@ -43,6 +43,8 @@ def baseline_response(s: Snapshot) -> BaselineResponse:
     return BaselineResponse(
         data_source=s.data_source,
         start_date=s.start_date,
+        as_of=s.as_of,
+        notes=list(s.notes),
         projects=[BaselineProject(**vars(p)) for p in s.projects],
         resources=[
             BaselineResource(

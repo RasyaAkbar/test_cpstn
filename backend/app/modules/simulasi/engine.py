@@ -43,10 +43,13 @@ class TaskOutcome:
 @dataclass
 class ResourceOutcome:
     resource_id: str
-    capacity: list[float]  # kapasitas proyek per hari (setelah cuti, onboarding, mentoring)
+    capacity: list[float]  # kapasitas proyek per hari (setelah cuti, BAU, onboarding, mentor)
     used_project: list[float] = field(default_factory=list)  # dipakai task proyek
     used_workload: list[float] = field(default_factory=list)  # dipakai tiket/hotfix
     idle_waiting: list[float] = field(default_factory=list)  # hilang karena dependency/blocker
+    # Kapasitas yang tersisa saat anggota bertemu task prioritasnya yang tertahan. Bagian
+    # yang tidak menjadi idle_waiting dialihkan ke task independen (FR-04.10).
+    wait_capacity: list[float] = field(default_factory=list)
 
 
 @dataclass
@@ -57,15 +60,19 @@ class SimulationResult:
     resources: dict[str, ResourceOutcome]
     days_simulated: int  # panjang semua list harian di ResourceOutcome
     warnings: list[str]
+    workload_done_day: dict[str, int] = field(default_factory=dict)  # item_id → hari selesai
 
     def date_of(self, day: int) -> date:
         return self.calendar.date_of(day)
 
     def project_finish_day(self, project_id: str) -> int | None:
-        """Hari task terakhir proyek selesai; None jika ada task yang belum selesai."""
+        """Hari task terakhir proyek selesai; None jika ada task yang belum selesai.
+
+        Proyek tanpa task terbuka dianggap siap launch di hari ke-0.
+        """
         days = [o.finish_day for o in self.tasks.values() if o.project_id == project_id]
         if not days:
-            return None
+            return 0
         return None if any(d is None for d in days) else max(days)
 
 
@@ -77,10 +84,9 @@ class WorkCalendar:
 
     def __init__(self, start: date, holidays: set[date]):
         self.start = start
+        self.holidays = frozenset(holidays)
         self._working = [
-            (start + timedelta(days=d)).weekday() < 5
-            and (start + timedelta(days=d)) not in holidays
-            for d in range(HORIZON_DAYS)
+            self.is_working_date(start + timedelta(days=d)) for d in range(HORIZON_DAYS)
         ]
 
     def date_of(self, day: int) -> date:
@@ -91,6 +97,22 @@ class WorkCalendar:
 
     def is_working(self, day: int) -> bool:
         return 0 <= day < HORIZON_DAYS and self._working[day]
+
+    def is_working_date(self, value: date) -> bool:
+        return value.weekday() < 5 and value not in self.holidays
+
+    def working_days_between(self, first: date, second: date) -> int:
+        """Hari kerja di (first, second]; negatif jika second sebelum first.
+
+        Dipakai untuk Schedule Variance (FR-04.1): launch Jumat dengan target Kamis = +1.
+        """
+        if second == first:
+            return 0
+        low, high = sorted((first, second))
+        count = sum(
+            1 for d in range(1, (high - low).days + 1) if self.is_working_date(low + timedelta(d))
+        )
+        return count if second > first else -count
 
 
 def _onboarding_factor(resource: Resource, worked_days: int) -> float:
@@ -106,7 +128,7 @@ def _capacity_profile(snapshot: Snapshot, calendar: WorkCalendar) -> dict[str, l
 
     Tidak bergantung pada effort task, jadi cukup dihitung sekali per snapshot dan dipakai
     ulang oleh semua replikasi. Urutan potongan: hari kerja → cuti → join/keluar →
-    ramp-up onboarding → overhead mentor.
+    porsi BAU (tiket/operasional rutin) → ramp-up onboarding → overhead mentor.
     """
     absent: dict[str, set[int]] = {}
     for a in snapshot.availability:
@@ -116,7 +138,7 @@ def _capacity_profile(snapshot: Snapshot, calendar: WorkCalendar) -> dict[str, l
     profile: dict[str, list[float]] = {}
     onboarding_until: dict[str, int] = {}  # hari terakhir onboarding tiap anggota baru
     for r in snapshot.resources:
-        base = snapshot.role_by_id[r.primary_role_id].capacity_reference
+        base = snapshot.role_by_id[r.primary_role_id].daily_capacity * (1 - r.bau_share)
         join = calendar.day_of(r.join_date) if r.join_date else -1
         leave = calendar.day_of(r.leave_date) if r.leave_date else HORIZON_DAYS
         days_out = absent.get(r.resource_id, set())
@@ -257,34 +279,64 @@ def _schedule(snapshot: Snapshot, prep: _Prepared, effort: dict[str, float]) -> 
         for t in snapshot.open_tasks()
     }
     remaining = dict(effort)
+    # Effort total (termasuk bagian yang sudah dikerjakan sebelum snapshot), agar
+    # propagation_factor dibandingkan dengan progres task, bukan progres sisa effort.
+    total = {
+        t.task_id: effort[t.task_id] / t.remaining_share if t.remaining_share > EPS else 0.0
+        for t in snapshot.open_tasks()
+    }
     wl_left = {rid: [list(item) for item in items] for rid, items in prep.workload.items()}
+    wl_done: dict[str, int] = {}
     resources_out = {rid: ResourceOutcome(rid, prep.capacity[rid]) for rid in prep.capacity}
     unfinished = set(outcomes)
+    # Progres hanya bertambah, jadi task yang predecessor-nya sudah terpenuhi tetap
+    # terpenuhi: cukup periksa task yang belum terpenuhi.
+    deps_pending = set(outcomes)
+    deps_met: set[str] = set()
+    # Daftar kerja per anggota; task selesai dibuang dari daftar pemiliknya keesokan hari.
+    work_list = {rid: list(items) for rid, items in prep.work_list.items()}
+    owners: dict[str, set[str]] = {}
+    for rid, items in work_list.items():
+        for item in items:
+            owners.setdefault(item[0].task_id, set()).add(rid)
+    stale: set[str] = set()
 
     day = 0
     while day < HORIZON_DAYS:
         wl_open = any(item[1] > EPS for items in wl_left.values() for item in items)
         if not unfinished and not wl_open and day > prep.last_target_day:
             break
+        if not prep.calendar.is_working(day):
+            # Akhir pekan/libur: semua kapasitas 0, tidak ada progres yang bisa berubah.
+            for out in resources_out.values():
+                for series in (out.used_workload, out.used_project, out.idle_waiting):
+                    series.append(0.0)
+                out.wait_capacity.append(0.0)
+            day += 1
+            continue
+        for rid in stale:
+            work_list[rid] = [item for item in work_list[rid] if item[0].task_id in unfinished]
+        stale.clear()
 
         # Kesiapan dievaluasi di awal hari agar urutan anggota tidak memengaruhi hasil.
         # Task siap jika setiap predecessor sudah selesai minimal sebesar propagation_factor.
-        ready: set[str] = set()
-        for tid in unfinished:
-            if day < prep.earliest[tid]:
-                continue
-            done_enough = all(
-                1 - remaining[p] / outcomes[p].effort_days >= f - EPS for p, f in prep.preds[tid]
-            )
-            if not done_enough:
-                continue
-            if outcomes[tid].dependency_ready_day is None:
+        for tid in [t for t in deps_pending if day >= prep.earliest[t]]:
+            if all(
+                total[p] <= EPS or 1 - remaining[p] / total[p] >= f - EPS
+                for p, f in prep.preds[tid]
+            ):
+                deps_pending.discard(tid)
+                deps_met.add(tid)
                 outcomes[tid].dependency_ready_day = day
-            if day not in prep.blocked.get(tid, ()):
-                ready.add(tid)
+        ready = {tid for tid in deps_met if day not in prep.blocked.get(tid, ())}
 
         for rid, out in resources_out.items():
             cap = out.capacity[day]
+            if cap <= EPS:  # cuti/belum bergabung: tidak ada yang bisa dikerjakan
+                for series in (out.used_workload, out.used_project, out.idle_waiting):
+                    series.append(0.0)
+                out.wait_capacity.append(0.0)
+                continue
 
             # Tiket/hotfix mendahului fitur (praktik PuTI: "hotfix goes first").
             used_wl = 0.0
@@ -296,16 +348,21 @@ def _schedule(snapshot: Snapshot, prep: _Prepared, effort: dict[str, float]) -> 
                     item[1] -= spent
                     cap -= spent
                     used_wl += spent
+                    if item[1] <= EPS:
+                        wl_done[item[2]] = day
             out.used_workload.append(used_wl)
 
             used_prj = 0.0
-            waiting = False  # ada task milik anggota yang tertahan dependency/blocker
-            for task, eff, a_start, a_end in prep.work_list[rid]:
+            # Kapasitas saat anggota pertama kali bertemu task prioritasnya yang tertahan
+            # dependency/blocker; None = tidak ada task tertahan yang menahan kapasitas.
+            wait_cap: float | None = None
+            for task, eff, a_start, a_end in work_list[rid]:
                 tid = task.task_id
                 if tid not in unfinished or not (a_start <= day < a_end):
                     continue
                 if tid not in ready:
-                    waiting = waiting or day >= prep.earliest[tid]
+                    if wait_cap is None and cap > EPS and day >= prep.earliest[tid]:
+                        wait_cap = cap
                     continue
                 if cap <= EPS:
                     continue
@@ -320,10 +377,15 @@ def _schedule(snapshot: Snapshot, prep: _Prepared, effort: dict[str, float]) -> 
                 if remaining[tid] <= EPS:
                     outcomes[tid].finish_day = day
                     unfinished.discard(tid)
+                    deps_met.discard(tid)
+                    stale |= owners[tid]
             out.used_project.append(used_prj)
             # Kapasitas tersisa padahal ada task milik anggota yang tertahan = hilang karena
-            # menunggu dependency/blocker. Ini data untuk KPI "capacity lost" Orang 3.
+            # menunggu (Blocked Ratio). Kapasitas yang tetap terpakai setelah bertemu task
+            # tertahan = dialihkan ke task independen (Reallocated Ratio, FR-04.10).
+            waiting = wait_cap is not None
             out.idle_waiting.append(cap if waiting and cap > EPS else 0.0)
+            out.wait_capacity.append(wait_cap if waiting else 0.0)
         day += 1
 
     for out in resources_out.values():
@@ -331,12 +393,14 @@ def _schedule(snapshot: Snapshot, prep: _Prepared, effort: dict[str, float]) -> 
     warnings = list(prep.warnings)
     if unfinished:
         warnings.append(f"{len(unfinished)} task belum selesai sampai batas horizon simulasi")
-    return SimulationResult(snapshot, prep.calendar, outcomes, resources_out, day, warnings)
+    return SimulationResult(
+        snapshot, prep.calendar, outcomes, resources_out, day, warnings, wl_done
+    )
 
 
 def run_simulation(snapshot: Snapshot) -> SimulationResult:
-    """Satu run deterministik dengan effort = estimated_days (nilai utama yang ditampilkan)."""
-    effort = {t.task_id: t.estimated_days for t in snapshot.open_tasks()}
+    """Satu run deterministik dengan effort = sisa estimasi (nilai utama yang ditampilkan)."""
+    effort = {t.task_id: t.remaining_days for t in snapshot.open_tasks()}
     return _schedule(snapshot, _prepare(snapshot), effort)
 
 
@@ -344,13 +408,14 @@ def run_simulation(snapshot: Snapshot) -> SimulationResult:
 
 
 def sample_effort(snapshot: Snapshot, task: Task, rng: random.Random) -> float:
-    """Distribusi segitiga [min_days, max_days] dengan modus = estimated_days."""
+    """Distribusi segitiga [min_days, max_days] dengan modus = estimated_days, lalu dikali
+    porsi effort yang masih tersisa."""
     level = snapshot.complexity_by_id[task.complexity_id]
     low = min(level.min_days, task.estimated_days)
     high = max(level.max_days, task.estimated_days)
     if high - low < EPS:
-        return task.estimated_days
-    return rng.triangular(low, high, task.estimated_days)
+        return task.remaining_days
+    return rng.triangular(low, high, task.estimated_days) * task.remaining_share
 
 
 def run_replications(snapshot: Snapshot, replications: int, seed: int) -> list[SimulationResult]:

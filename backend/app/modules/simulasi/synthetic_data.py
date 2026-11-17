@@ -1,11 +1,11 @@
-"""Data sintetis baseline selama data PuTI belum dirilis (Tabel 3.2, "Synthetic project data").
+"""Baseline sintetis kecil untuk tes dan contoh (Tabel 3.2, "Synthetic project data").
 
 PEMILIK: Orang 2 — Simulasi (Iterasi 1).
 
 Struktur mengikuti Tabel 4.3. Nama anggota dipseudonimkan (UU PDP No. 27/2022, III.1.2).
-Angka di sini bukan data PuTI: hasil simulasi menunjukkan perilaku sistem, bukan prakiraan
-proyek nyata (III.2.2). Ganti sumber ini lewat baseline.get_baseline_snapshot() saat modul
-Data / Digital Twin sudah menyediakan baseline.
+Aplikasi tidak lagi memakai data ini: baseline API dibaca dari database (baseline.py,
+db_baseline.py). Di sini capacity Role adalah hari-orang proyek per hari (0.6–0.8), karena
+data sintetis ini tidak punya workload_items untuk menghitung porsi BAU.
 """
 
 from datetime import date

@@ -98,7 +98,7 @@ export function SimulasiPage() {
   return <div className="sim-page">
     <div className="sim-context">
       <span className="badge badge-accent">Sumber data: {baseline.data_source === 'synthetic' ? 'sintetis' : 'PuTI'}</span>
-      <span className="badge">Baseline mulai {formatDate(baseline.start_date)}</span>
+      <span className="badge" title={baseline.notes.join('\n')}>{baseline.as_of && <>Data per {formatDate(baseline.as_of)} · </>}Baseline mulai {formatDate(baseline.start_date)}</span>
       <span className="badge">{baseline.projects.length} proyek · {baseline.resources.length} anggota · {baseline.tasks.length} task</span>
     </div>
 
