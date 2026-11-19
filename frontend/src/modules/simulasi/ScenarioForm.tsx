@@ -4,10 +4,18 @@
 import type { Baseline, NewTask, Situation } from './api';
 import { SITUATION_ORDER, SITUATIONS, type FieldSpec } from './situations';
 import { Button } from '../../shared/ui';
+import './scenarioForm.css';
 
 export type Draft = { name: string; description: string; parameters: Record<string, unknown> & { situation: Situation } };
 
 type Props = { baseline: Baseline; draft: Draft; onChange: (draft: Draft) => void };
+
+/** Anggota lain dengan role utama yang sama dengan anggota `memberId` (calon pengganti). */
+function sameRoleCandidates(baseline: Baseline, memberId: unknown): Baseline['resources'] {
+  const member = baseline.resources.find((r) => r.resource_id === memberId);
+  if (!member) return [];
+  return baseline.resources.filter((r) => r.resource_id !== member.resource_id && r.primary_role_id === member.primary_role_id);
+}
 
 export function ScenarioForm({ baseline, draft, onChange }: Props) {
   const situation = draft.parameters.situation;
@@ -16,6 +24,14 @@ export function ScenarioForm({ baseline, draft, onChange }: Props) {
     const parameters = { ...draft.parameters, [key]: value };
     // Task yang di-drop milik proyek lama tidak berlaku lagi setelah proyek diganti.
     if (situation === 'change_request' && key === 'project_id') parameters.remove_task_ids = [];
+    // Pengganti harus tetap satu role dengan anggota; kosongkan jika anggota diganti dan pilihan lama tidak cocok.
+    for (const f of spec.fields) {
+      if (f.sameRoleAs !== key) continue;
+      const stillValid = sameRoleCandidates(baseline, value).some((r) => r.resource_id === parameters[f.key]);
+      if (!stillValid) parameters[f.key] = null;
+    }
+    // Pengganti otomatis dan pengganti manual saling meniadakan.
+    if (key === 'auto_cover' && value) parameters.cover_resource_id = null;
     onChange({ ...draft, parameters });
   };
   const changeSituation = (next: Situation) => onChange({ ...draft, parameters: { situation: next, ...SITUATIONS[next].defaults(baseline) } });
@@ -31,7 +47,7 @@ export function ScenarioForm({ baseline, draft, onChange }: Props) {
         </select>
         <small>{spec.summary}</small>
       </label>
-      {spec.fields.map((field) => <FieldInput key={field.key} field={field} baseline={baseline} value={draft.parameters[field.key]} onChange={(v) => setParam(field.key, v)} />)}
+      {spec.fields.map((field) => <FieldInput key={field.key} field={field} baseline={baseline} value={draft.parameters[field.key]} params={draft.parameters} onChange={(v) => setParam(field.key, v)} />)}
       {situation === 'change_request' && <ChangeRequestEditor baseline={baseline} params={draft.parameters} setParam={setParam} />}
       <label className="field field-wide"><span>Catatan (opsional)</span>
         <textarea rows={2} maxLength={500} value={draft.description} onChange={(e) => onChange({ ...draft, description: e.target.value })} />
@@ -42,15 +58,23 @@ export function ScenarioForm({ baseline, draft, onChange }: Props) {
 
 // ─── Satu input per FieldSpec ───────────────────────────────────────────────────
 
-type FieldProps = { field: FieldSpec; baseline: Baseline; value: unknown; onChange: (value: unknown) => void };
+type FieldProps = { field: FieldSpec; baseline: Baseline; value: unknown; params: Draft['parameters']; onChange: (value: unknown) => void };
 
-function FieldInput({ field, baseline, value, onChange }: FieldProps) {
+function FieldInput({ field, baseline, value, params, onChange }: FieldProps) {
   const text = value === null || value === undefined ? '' : String(value);
   const fromText = (raw: string) => (raw === '' && field.optional ? null : raw);
+  const resources = field.sameRoleAs ? sameRoleCandidates(baseline, params[field.sameRoleAs]) : baseline.resources;
+  // Jika "pilih pengganti otomatis" aktif, pilihan manual dinonaktifkan.
+  const autoCover = field.key === 'cover_resource_id' && Boolean(params.auto_cover);
   let control;
   switch (field.kind) {
     case 'boolean':
-      return <label className="field field-check"><input type="checkbox" checked={Boolean(value)} onChange={(e) => onChange(e.target.checked)} /><span>{field.label}{field.hint && <small>{field.hint}</small>}</span></label>;
+      // Baris label kosong menjaga kotak toggle tetap sejajar dengan input di kolom sebelahnya.
+      return <div className="field">
+        <span aria-hidden="true">&nbsp;</span>
+        <label className="field-check field-toggle"><input type="checkbox" checked={Boolean(value)} onChange={(e) => onChange(e.target.checked)} /><span>{field.label}</span></label>
+        {field.hint && <small>{field.hint}</small>}
+      </div>;
     case 'date':
       control = <input type="date" value={text} required={!field.optional} onChange={(e) => onChange(fromText(e.target.value))} />;
       break;
@@ -61,18 +85,20 @@ function FieldInput({ field, baseline, value, onChange }: FieldProps) {
       control = <input value={text} required onChange={(e) => onChange(e.target.value)} />;
       break;
     default:
-      control = <select value={text} onChange={(e) => onChange(fromText(e.target.value))}>
+      control = <select value={text} disabled={autoCover} onChange={(e) => onChange(fromText(e.target.value))}>
         {field.optional && <option value="">—</option>}
-        <EntityOptions kind={field.kind} baseline={baseline} choices={field.choices} />
+        <EntityOptions kind={field.kind} baseline={baseline} choices={field.choices} resources={resources} />
       </select>;
   }
-  return <label className="field"><span>{field.label}</span>{control}{field.hint && <small>{field.hint}</small>}</label>;
+  const noCandidates = field.sameRoleAs !== undefined && resources.length === 0;
+  const hint = autoCover ? 'Dipilih otomatis saat simulasi dijalankan.' : noCandidates ? 'Tidak ada anggota lain dengan role yang sama.' : field.hint;
+  return <label className="field"><span>{field.label}</span>{control}{hint && <small>{hint}</small>}</label>;
 }
 
-function EntityOptions({ kind, baseline, choices }: { kind: FieldSpec['kind']; baseline: Baseline; choices?: FieldSpec['choices'] }) {
+function EntityOptions({ kind, baseline, choices, resources }: { kind: FieldSpec['kind']; baseline: Baseline; choices?: FieldSpec['choices']; resources: Baseline['resources'] }) {
   switch (kind) {
     case 'project': return <>{baseline.projects.map((p) => <option key={p.project_id} value={p.project_id}>{p.project_name}</option>)}</>;
-    case 'resource': return <>{baseline.resources.map((r) => <option key={r.resource_id} value={r.resource_id}>{r.resource_name} ({r.primary_role_id})</option>)}</>;
+    case 'resource': return <>{resources.map((r) => <option key={r.resource_id} value={r.resource_id}>{r.resource_name} ({r.primary_role_id})</option>)}</>;
     case 'role': return <>{baseline.roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</>;
     case 'task': return <TaskOptions baseline={baseline} />;
     default: return <>{choices?.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</>;

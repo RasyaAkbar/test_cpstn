@@ -1,6 +1,3 @@
-/* Simulasi workspace — Linear × Jira
-   PEMILIK: Orang 1 — Frontend. */
-
 /* Workspace */
 .sim-page {
   display: flex;
@@ -297,17 +294,20 @@
 
 .gantt-col {
   width: 40%;
-  min-width: 220px;
+  min-width: 260px;
 }
 
 .gantt-track {
   position: relative;
   height: 22px;
+  margin-right: 8px;
+  background: linear-gradient(var(--color-border), var(--color-border)) 0 50% / 100% 1px no-repeat;
 }
 
 .gantt-bar {
   position: absolute;
   height: 7px;
+  min-width: 8px;
   border-radius: var(--radius-pill);
 }
 

@@ -15,6 +15,7 @@ export type FieldSpec = {
   min?: number; max?: number; step?: number;
   choices?: readonly { value: string; label: string }[];
   hint?: string;
+  sameRoleAs?: string; // key field anggota lain; pilihan dibatasi ke anggota dengan role utama sama
 };
 
 type SituationSpec = {
@@ -52,7 +53,7 @@ export const SITUATIONS: Record<Situation, SituationSpec> = {
       { key: 'date_start', label: 'Mulai absen', kind: 'date' },
       { key: 'date_end', label: 'Selesai absen', kind: 'date' },
       { key: 'absence_type', label: 'Jenis', kind: 'choice', choices: [{ value: 'sudden', label: 'Mendadak' }, { value: 'planned', label: 'Terencana' }] },
-      { key: 'cover_resource_id', label: 'Pengganti', kind: 'resource', optional: true },
+      { key: 'cover_resource_id', label: 'Pengganti', kind: 'resource', optional: true, sameRoleAs: 'resource_id', hint: 'Hanya anggota dengan role yang sama' },
       { key: 'auto_cover', label: 'Pilih pengganti otomatis', kind: 'boolean', hint: 'Anggota role sama dengan beban terkecil' },
     ],
     defaults: (b) => ({ resource_id: b.resources[0]?.resource_id, date_start: addDays(b.start_date, 7), date_end: addDays(b.start_date, 18), absence_type: 'sudden', cover_resource_id: null, auto_cover: false }),
@@ -81,7 +82,7 @@ export const SITUATIONS: Record<Situation, SituationSpec> = {
       { key: 'transfer_date', label: 'Tanggal pindah', kind: 'date' },
       { key: 'from_project_id', label: 'Dari proyek', kind: 'project' },
       { key: 'to_project_id', label: 'Ke proyek', kind: 'project', optional: true, hint: 'Kosong = keluar dari unit' },
-      { key: 'replacement_resource_id', label: 'Pengganti', kind: 'resource', optional: true },
+      { key: 'replacement_resource_id', label: 'Pengganti', kind: 'resource', optional: true, sameRoleAs: 'resource_id', hint: 'Hanya anggota dengan role yang sama' },
       { key: 'auto_replacement', label: 'Pilih pengganti otomatis', kind: 'boolean' },
     ],
     defaults: (b) => ({ resource_id: b.resources[0]?.resource_id, transfer_date: addDays(b.start_date, 14), from_project_id: b.projects[0]?.project_id, to_project_id: null, replacement_resource_id: null, auto_replacement: true }),

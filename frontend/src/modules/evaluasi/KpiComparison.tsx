@@ -1,43 +1,54 @@
 /* Tabel perbandingan KPI baseline vs skenario, penanda nilai lebih buruk, indikator
    skenario terbaik, Schedule Variance per proyek, beban per anggota (RLI/SOI), dan task
    dengan Cascade Delay Impact terbesar (FR-04.1 s.d. FR-04.10, FR-06, Tabel 4.7).
-   peringkat skenario, ketepatan target per proyek, dan beban per anggota (FR-06, Tabel 4.7).
    PEMILIK: Orang 1 — Frontend. Definisi dan arah KPI datang dari backend (Orang 3). */
 
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import type { CompareResponse, Evaluation, KpiDefinition, KpiValue, TaskCascade } from './api';
 import { formatDate, formatNumber, formatSigned } from '../../shared/format';
+import { KPI_EXPLANATION } from './kpiExplanations';
 
 type Props = { result: CompareResponse; definitions: KpiDefinition[] };
 
 const STATUS_LABEL = { better: 'lebih baik', worse: 'lebih buruk', same: 'sama' } as const;
 const columnKey = (c: Evaluation) => c.scenario_id ?? 'baseline';
+const rliPct = (rli: number, limit: number) => Math.max(0, Math.min(100, (rli / limit) * 100));
 
 export function KpiComparison({ result, definitions }: Props) {
   const columns = [result.baseline, ...result.scenarios];
   const best = result.scenarios.find((s) => s.scenario_id === result.best_scenario_id);
   const withRange = result.replications > 0;
   const threshold = formatNumber(result.overload_threshold);
+  const isBest = (c: Evaluation) => c.scenario_id !== null && c.scenario_id === result.best_scenario_id;
+  const worseCount = best ? best.kpis.filter((k) => k.status === 'worse').length : 0;
 
   return <>
-    <section className="module-panel" aria-label="Perbandingan KPI">
+    <section id="hasil-perbandingan" className="module-panel" aria-label="Perbandingan KPI">
       <div className="panel-heading">
         <h2>Perbandingan KPI</h2>
         <span className="subtle-badge">Data {result.data_source === 'synthetic' ? 'sintetis' : 'PuTI'} · {withRange ? `${result.replications} replikasi` : 'estimasi tunggal'} · threshold RLI {threshold}</span>
       </div>
       {best && <div className="eval-best">
-        <strong>Skenario terbaik: {best.name}</strong>
-        <p>Diurutkan berdasarkan {result.ranking_basis.join(' → ')}. Skenario terbaik adalah yang paling kecil dampaknya; keputusan tetap di Kepala Seksi dan System Analyst.</p>
+        <div className="eval-best-heading">
+          <span className="eval-best-indicator" aria-hidden="true" />
+          <strong>Peringkat tertinggi: {best.name}</strong>
+        </div>
+        <p>Diurutkan berdasarkan {result.ranking_basis.join(' → ')}. Skenario terbaik adalah yang paling kecil dampaknya.</p>
+        <p className="eval-best-note">Peringkat tertinggi tidak selalu lebih baik daripada baseline. Cek tiap KPI sebelum memutuskan. Keputusan akhir tetap di Kepala Seksi dan System Analyst.</p>
+        {worseCount > 0 && <p className="eval-ranking-warning">{worseCount} KPI pada skenario ini lebih buruk dibanding baseline.</p>}
       </div>}
       <div className="table-scroll"><table className="data-table kpi-table">
-        <thead><tr><th>KPI</th>{columns.map((c) => <th key={columnKey(c)} className={c.scenario_id === result.best_scenario_id ? 'is-best' : ''}>
-          {c.name}{c.scenario_id === result.best_scenario_id && <span className="pill pill-success">Terbaik</span>}
+        <thead><tr><th>KPI</th>{columns.map((c) => <th key={columnKey(c)} className={isBest(c) ? 'is-best' : ''}>
+          <span className="eval-column-name">{c.name}</span>
+          {isBest(c) && <span className="eval-column-best">Peringkat #1</span>}
         </th>)}</tr></thead>
         <tbody>{definitions.map((def) => <tr key={def.key}>
-          <th scope="row" title={def.description}>{def.label}<small>{def.fr} · {def.unit} · {def.better === 'lower' ? 'makin kecil makin baik' : 'makin besar makin baik'}</small></th>
-          {columns.map((c) => <KpiCell key={columnKey(c)} value={c.kpis.find((k) => k.key === def.key)} best={c.scenario_id === result.best_scenario_id} />)}
+          <KpiLabel def={def} columns={columns} />
+          {columns.map((c) => <KpiCell key={columnKey(c)} value={c.kpis.find((k) => k.key === def.key)} best={isBest(c)} />)}
         </tr>)}</tbody>
       </table></div>
-      <p className="text-caption eval-footnote">Nilai utama memakai sisa estimasi effort dari data. {withRange ? 'Baris kecil menampilkan median dan rentang P10–P90 dari replikasi, karena hasil simulasi bersifat acak.' : 'Peluang launch tepat waktu butuh replikasi > 0.'} Delta = skenario − baseline. Arahkan kursor ke nama KPI untuk melihat rumusnya.</p>
+      <p className="text-caption eval-footnote">Nilai utama memakai sisa estimasi effort dari data. {withRange ? 'Baris kecil menampilkan median dan rentang P10–P90 dari replikasi, karena hasil simulasi bersifat acak.' : 'Peluang launch tepat waktu butuh replikasi > 0.'} Delta = skenario − baseline. Arahkan kursor ke ikon i di samping nama KPI untuk melihat penjelasan, rumus, dan nilainya. Klik ikon i untuk menyematkan kartunya di tengah layar.</p>
     </section>
 
     <section className="module-panel" aria-label="Schedule Variance per proyek">
@@ -63,7 +74,18 @@ export function KpiComparison({ result, definitions }: Props) {
             const m = c.members.find((x) => x.resource_id === id);
             return <td key={columnKey(c)} className={`num ${m && m.soi > 0 ? 'cell-danger' : ''}`}
               title={m ? `Rata-rata RLI ${formatNumber(m.rli_mean)} · ${m.overload_weeks} minggu overload · Blocked ${formatNumber(m.blocked_ratio)}% · Reallocated ${formatNumber(m.reallocated_ratio)}%` : undefined}>
-              {m ? <>RLI puncak {formatNumber(m.rli_peak)}{m.soi > 0 && <small>SOI {formatNumber(m.soi)}</small>}</> : '—'}
+              {m ? <div className="eval-workload-cell">
+                <div className="eval-workload-value">
+                  <strong>{formatNumber(m.rli_peak)}</strong>
+                  {m.rli_peak > result.overload_threshold && <span className="eval-overload-label">Overload</span>}
+                </div>
+                <div className="eval-workload-track" role="progressbar" aria-label={`RLI puncak ${m.resource_name}`}
+                  aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(rliPct(m.rli_peak, result.overload_threshold))}>
+                  <span className={`eval-workload-fill ${m.rli_peak > result.overload_threshold ? 'is-overloaded' : ''}`}
+                    style={{ width: `${rliPct(m.rli_peak, result.overload_threshold)}%` }} />
+                </div>
+                {m.soi > 0 && <small>SOI {formatNumber(m.soi)}</small>}
+              </div> : '—'}
             </td>;
           })}
         </tr>)}</tbody>
@@ -77,6 +99,90 @@ export function KpiComparison({ result, definitions }: Props) {
       <p className="text-caption eval-footnote">CDI = keterlambatan task × jumlah faktor propagasi ke task hilir (hard 1.0, soft 0.3), dalam hari kerja (FR-04.7). Menangani task teratas lebih dulu mengurangi keterlambatan berantai paling banyak.</p>
     </section>
   </>;
+}
+
+/** Nama KPI + ikon "i". Hover ikon: kartu info di dekat ikon. Klik ikon: kartu disematkan di tengah layar
+    (tutup dengan tombol ×, klik di luar kartu, atau Esc). Kartu dirender lewat portal agar tidak terpotong tabel. */
+function KpiLabel({ def, columns }: { def: KpiDefinition; columns: Evaluation[] }) {
+  const id = useId();
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const [hoverStyle, setHoverStyle] = useState<CSSProperties | null>(null);
+  const [pinned, setPinned] = useState(false);
+  const lowerIsBetter = def.better === 'lower';
+
+  const showHover = () => {
+    const r = buttonRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - 400));
+    // Tampilkan di atas jika ruang di bawah tidak cukup.
+    setHoverStyle(r.bottom + 440 > window.innerHeight ? { left, bottom: window.innerHeight - r.top + 8 } : { left, top: r.bottom + 8 });
+  };
+  const pin = () => { setHoverStyle(null); setPinned(true); };
+  const unpin = () => { setPinned(false); buttonRef.current?.focus(); };
+
+  useEffect(() => {
+    if (!pinned) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') unpin(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pinned]);
+
+  return <th scope="row" className="kpi-name">
+    <span className="kpi-name-label">
+      {def.label}
+      <button ref={buttonRef} type="button" className="kpi-info" aria-label={`Info tentang ${def.label}`} aria-haspopup="dialog" aria-expanded={pinned}
+        aria-describedby={hoverStyle ? id : undefined}
+        onMouseEnter={showHover} onMouseLeave={() => setHoverStyle(null)}
+        onFocus={() => { if (!pinned) showHover(); }} onBlur={() => setHoverStyle(null)}
+        onClick={pin}>i</button>
+    </span>
+    <small>{def.fr} · {def.unit} · {lowerIsBetter ? 'makin kecil makin baik' : 'makin besar makin baik'}</small>
+    {hoverStyle && createPortal(<KpiCard id={id} def={def} columns={columns} style={hoverStyle} />, document.body)}
+    {pinned && createPortal(
+      <div className="kpi-overlay" onClick={unpin}>
+        <KpiCard def={def} columns={columns} onClose={unpin} />
+      </div>, document.body)}
+  </th>;
+}
+
+type KpiCardProps = { def: KpiDefinition; columns: Evaluation[]; id?: string; style?: CSSProperties; onClose?: () => void };
+
+/** Isi kartu: penjelasan, rumus, nilai tiap kolom, dan arah baik/buruk. `onClose` ada = mode tersemat (dialog). */
+function KpiCard({ def, columns, id, style, onClose }: KpiCardProps) {
+  const explanation = KPI_EXPLANATION[def.key];
+  const lowerIsBetter = def.better === 'lower';
+  const pinned = onClose !== undefined;
+
+  return <div id={id} className={`kpi-card ${pinned ? 'is-pinned' : ''}`} style={style}
+    role={pinned ? 'dialog' : 'tooltip'} aria-modal={pinned || undefined} aria-label={pinned ? `Info ${def.label}` : undefined}
+    onClick={pinned ? (e) => e.stopPropagation() : undefined}>
+    <div className="kpi-card-head">
+      <strong>{def.label}</strong>
+      <div className="kpi-card-tags"><span className="kpi-card-tag">{def.fr}</span><span className="kpi-card-tag">{def.unit}</span></div>
+      {pinned && <button type="button" className="kpi-card-close" aria-label="Tutup" autoFocus onClick={onClose}>×</button>}
+    </div>
+    <div className="kpi-card-body">
+      {explanation && <div className="kpi-card-section"><b>Penjelasan</b><span>{explanation}</span></div>}
+      <div className="kpi-card-section"><b>Rumus</b><span className="kpi-card-formula">{def.description}</span></div>
+      <div className="kpi-card-section"><b>Nilai</b>
+        <span className="kpi-card-values">
+          {columns.map((c) => {
+            const v = c.kpis.find((k) => k.key === def.key);
+            return <span key={columnKey(c)} className="kpi-card-row">
+              <span className="kpi-card-row-name">{c.name}</span>
+              <span className="kpi-card-row-value">
+                {formatNumber(v?.value ?? null)}
+                {v && v.delta !== null && v.status && v.status !== 'same' && <span className={`delta delta-${v.status}`}> {formatSigned(v.delta)}</span>}
+              </span>
+            </span>;
+          })}
+        </span>
+      </div>
+    </div>
+    <div className="kpi-card-foot">
+      <span aria-hidden="true">{lowerIsBetter ? '↓' : '↑'}</span>{lowerIsBetter ? 'Makin kecil makin baik' : 'Makin besar makin baik'}
+    </div>
+  </div>;
 }
 
 function KpiCell({ value, best }: { value: KpiValue | undefined; best: boolean }) {
@@ -99,9 +205,13 @@ function ProjectCell({ evaluation, projectId }: { evaluation: Evaluation; projec
   const p = evaluation.projects.find((x) => x.project_id === projectId);
   if (!p) return <td>—</td>;
   return <td className={p.on_target ? '' : 'cell-danger'}>
-    {formatDate(p.projected_finish)}
-    {p.sv_days !== 0 && <span className={`delta delta-${p.sv_days > 0 ? 'worse' : 'better'}`}> SV {formatSigned(p.sv_days)} hari kerja</span>}
-    {p.on_target_probability !== null && <small>Peluang tepat waktu {Math.round(p.on_target_probability * 100)}%</small>}
+    <div className="eval-project-cell">
+      <strong>{formatDate(p.projected_finish)}</strong>
+      <span className={`eval-project-status ${p.on_target ? 'is-on-target' : 'is-delayed'}`}>
+        {p.on_target ? 'Tepat waktu' : `Terlambat · SV ${formatSigned(p.sv_days)} hari kerja`}
+      </span>
+      {p.on_target_probability !== null && <small>Peluang tepat waktu {Math.round(p.on_target_probability * 100)}%</small>}
+    </div>
   </td>;
 }
 

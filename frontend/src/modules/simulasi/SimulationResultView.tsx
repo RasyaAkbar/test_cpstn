@@ -1,8 +1,3 @@
-/* Layar "Simulation result" (UC-04, FR-04, Tabel 4.7): proyek terdampak, jadwal
-   skenario vs baseline, dan beban anggota per minggu. Ringkasan KPI diambil dari modul
-   evaluasi (Orang 3) agar angka sama dengan halaman Evaluasi.
-   PEMILIK: Orang 1 — Frontend. */
-
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { SimulationRun, TaskChange, WeeklyLoad } from './api';
@@ -73,9 +68,12 @@ const shiftStatus = (shift: number | null) => (shift === null || shift === 0 ? '
 function ScheduleTable({ tasks }: { tasks: TaskChange[] }) {
   const [onlyChanged, setOnlyChanged] = useState(true);
   const rows = onlyChanged ? tasks.filter((t) => t.change !== 'unchanged') : tasks;
-  const dates = tasks.flatMap((t) => [t.baseline_start, t.baseline_finish, t.scenario_start, t.scenario_finish]).filter((d): d is string => d !== null).sort();
+  // Skala linimasa mengikuti task yang sedang ditampilkan (bukan seluruh proyek),
+  // supaya bar tidak mengecil jadi titik saat hanya task yang berubah yang ditampilkan.
+  const dates = rows.flatMap((t) => [t.baseline_start, t.baseline_finish, t.scenario_start, t.scenario_finish]).filter((d): d is string => d !== null).sort();
   const first = dates[0];
-  const span = first ? daysBetween(first, dates[dates.length - 1]) + 1 : 1;
+  const last = dates[dates.length - 1];
+  const span = first ? daysBetween(first, last) + 1 : 1;
   const bar = (start: string | null, finish: string | null) => {
     if (!first || !start || !finish) return undefined;
     return { left: `${(daysBetween(first, start) / span) * 100}%`, width: `${Math.max(((daysBetween(start, finish) + 1) / span) * 100, 0.8)}%` };
@@ -86,7 +84,7 @@ function ScheduleTable({ tasks }: { tasks: TaskChange[] }) {
       <h3>Jadwal skenario vs baseline</h3>
       <label className="field-check"><input type="checkbox" checked={onlyChanged} onChange={(e) => setOnlyChanged(e.target.checked)} /><span>Hanya task yang berubah</span></label>
     </div>
-    <p className="legend"><span className="legend-bar legend-baseline" />Baseline <span className="legend-bar legend-scenario" />Skenario {first && <>· {formatDate(first)} – {formatDate(dates[dates.length - 1])}</>}</p>
+    <p className="legend"><span className="legend-bar legend-baseline" />Baseline <span className="legend-bar legend-scenario" />Skenario {first && <>· Rentang linimasa {formatDate(first)} – {formatDate(last)}</>}</p>
     {rows.length === 0 ? <p className="text-caption">Tidak ada task yang bergeser.</p> :
       <div className="table-scroll"><table className="data-table gantt-table">
         <thead><tr><th>Task</th><th>Status</th><th>Selesai (baseline → skenario)</th><th className="gantt-col">Linimasa</th></tr></thead>
